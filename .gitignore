@@ -1,0 +1,17 @@
+# PBR 책 웹버전 (download_pbr.py로 재다운로드 가능)
+pbr4ed/
+
+# 브라우저로 저장한 페이지 (불필요)
+Physically Based Rendering_*/
+*.html
+
+# PDF 원본 (용량 크고 바이너리)
+*.pdf
+
+# Python 캐시
+__pycache__/
+*.pyc
+*.pyo
+
+CLAUDE.md
+PROGRESS.md

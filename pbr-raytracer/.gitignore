@@ -1,0 +1,9 @@
+# CMake 빌드 산출물
+build/
+cmake-build-*/
+
+# 렌더링 결과 이미지
+output/
+
+# JetBrains IDE 설정
+.idea/
