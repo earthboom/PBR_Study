@@ -20,8 +20,9 @@
 ### Ray Tracing in One Weekend (1권)
 - [x] Ch.1 Output an Image — PPM 포맷, 이미지 좌표계, 색상 정규화
 - [x] Ch.2 The vec3 Class — 내적/외적/정규화, point3/color 별칭
-- [ ] **Ch.3 Rays, a Simple Camera ← 현재 위치**
-- [ ] Ch.4 Adding a Sphere
+- [x] Ch.3 Rays, a Simple Camera — ray 클래스, 뷰포트, 선형 보간 배경
+- [x] Ch.4 Adding a Sphere — 광선-구 교차, 이차방정식, 법선 시각화
+- [ ] **Ch.5 Surface Normals ← 현재 위치**
 - [ ] Ch.5 Surface Normals
 - [ ] Ch.6 Antialiasing
 - [ ] Ch.7 Diffuse Materials
