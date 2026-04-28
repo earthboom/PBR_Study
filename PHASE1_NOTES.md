@@ -396,7 +396,7 @@ return (1.0 - t) * white + t * sky_blue;    // Lerp
 
 ### 결과물
 
-![Ch.3 배경](pbr-raytracer/cmake-build-debug-visual-studio/output/ch3_background.png)
+![Ch.3 배경](pbr-raytracer/results/ch3_background.png)
 
 이후 챕터에서 이 배경 위로 구, 재질, 조명이 쌓여간다.
 
@@ -563,7 +563,7 @@ return 0.5 * color(normal.x()+1, normal.y()+1, normal.z()+1); // -1~1 → 0~1
 
 ### 결과물
 
-![Ch.4 구](pbr-raytracer/cmake-build-debug-visual-studio/output/ch4_sphere.png)
+![Ch.4 구](pbr-raytracer/results/ch4_sphere.png)
 
 법선 방향이 색상으로 표현된 구. 이 법선 벡터가 이후 조명 계산(내적)의 핵심 입력이 된다.
 
@@ -755,7 +755,7 @@ ray_color(r, world)
 
 ### 결과물
 
-![Ch.5 다중 오브젝트](pbr-raytracer/cmake-build-debug-visual-studio/output/ch5_normals.png)
+![Ch.5 다중 오브젝트](pbr-raytracer/results/ch5_normals.png)
 
 씬에 큰 땅 구(반지름 100, 아래쪽) + 작은 구(반지름 0.5, 정면) 두 개를 배치했다.
 두 구 모두 같은 `ray_color` 코드 한 줄 (`world.hit(...)`)로 처리된다.
