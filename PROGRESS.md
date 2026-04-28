@@ -1,6 +1,6 @@
 # 학습 진행 상황
 
-## 현재 Phase: Phase 1 진행 중 — 다음 작업: Ch.3 Rays, a Simple Camera
+## 현재 Phase: Phase 1 진행 중 — 다음 작업: Ch.6 Antialiasing
 
 ---
 
@@ -22,9 +22,8 @@
 - [x] Ch.2 The vec3 Class — 내적/외적/정규화, point3/color 별칭
 - [x] Ch.3 Rays, a Simple Camera — ray 클래스, 뷰포트, 선형 보간 배경
 - [x] Ch.4 Adding a Sphere — 광선-구 교차, 이차방정식, 법선 시각화
-- [ ] **Ch.5 Surface Normals ← 현재 위치**
-- [ ] Ch.5 Surface Normals
-- [ ] Ch.6 Antialiasing
+- [x] Ch.5 Surface Normals — hittable 추상화, 앞/뒷면 법선, hittable_list, interval
+- [ ] **Ch.6 Antialiasing ← 현재 위치**
 - [ ] Ch.7 Diffuse Materials
 - [ ] Ch.8 Metal
 - [ ] Ch.9 Dielectrics

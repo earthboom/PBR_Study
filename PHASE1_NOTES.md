@@ -76,6 +76,8 @@ PBR의 모든 빛 계산은 **0.0~1.0 실수**로 이루어진다.
 
 PPM도 이 순서를 따라 위쪽 행(j=0)부터 픽셀을 저장한다.
 
+![이미지 좌표계](diagrams/image_coords.png)
+
 ---
 
 ### 결과물 — 좌표를 색상으로
@@ -358,6 +360,8 @@ point3 pixel_center = pixel00_loc         // 첫 번째 픽셀(0,0)의 중심
 - 뷰포트가 클수록 시야각(FOV)이 넓어진다
 - `focal_length`가 클수록 시야각이 좁아진다 (망원렌즈 효과)
 
+![뷰포트 구조](diagrams/viewport.png)
+
 ---
 
 ### 선형 보간 (Lerp) — "두 색 사이를 부드럽게 섞기"
@@ -387,6 +391,8 @@ $$t = \frac{y + 1}{2} = 0.5 \times (y + 1)$$
 double t = 0.5 * (unit_dir.y() + 1.0);      // y: -1~+1 → t: 0~1
 return (1.0 - t) * white + t * sky_blue;    // Lerp
 ```
+
+![Lerp 그라디언트](diagrams/lerp.png)
 
 ### 결과물
 
@@ -419,6 +425,8 @@ return (1.0 - t) * white + t * sky_blue;    // Lerp
 - 화살이 풍선을 **빗나가면** 맞지 않는다
 
 이걸 수학으로 표현해보자. **"광선 위의 어느 t에서 구 표면에 닿는가?"** 를 구하는 것이 목표다.
+
+![광선-구 교차 3가지 경우](diagrams/ray_sphere.png)
 
 ---
 
@@ -551,6 +559,8 @@ vec3 normal = unit_vector(r.at(t) - sphere_center); // 길이 1의 법선벡터
 return 0.5 * color(normal.x()+1, normal.y()+1, normal.z()+1); // -1~1 → 0~1
 ```
 
+![법선 벡터 색상 매핑](diagrams/normal_colors.png)
+
 ### 결과물
 
 ![Ch.4 구](pbr-raytracer/cmake-build-debug-visual-studio/output/ch4_sphere.png)
@@ -559,3 +569,205 @@ return 0.5 * color(normal.x()+1, normal.y()+1, normal.z()+1); // -1~1 → 0~1
 
 ### 관련 파일
 - [src/main.cpp](pbr-raytracer/src/main.cpp)
+
+---
+
+## Ch.5 — 표면 법선과 다중 오브젝트 (Surface Normals and Multiple Objects)
+
+### 왜 이걸 하는가?
+
+Ch.4까지는 `main.cpp` 안에 `hit_sphere` 함수 하나로 구 하나만 다뤘다.
+실제 씬은 **수많은 오브젝트**(구, 평면, 삼각형 메시…)로 구성된다.
+이걸 깔끔히 다루려면 두 가지 변화가 필요하다:
+
+1. **공통 인터페이스로 추상화** — 오브젝트마다 `hit_sphere`, `hit_plane`, `hit_triangle`을 따로 만들면 `ray_color`가 종류별 분기로 가득 찬다. 모두가 따르는 단일 인터페이스 `hittable` 을 만들면 `ray_color`는 종류를 신경 쓰지 않아도 된다.
+2. **앞면/뒷면 법선 판별** — Ch.4의 법선 계산 `(P - C) / r` 은 **항상 바깥**을 향한다. 광선이 구 안에서 밖으로 나가는 경우 (유리 내부 굴절 등)에는 이 법선이 광선과 같은 방향이라 조명 계산이 깨진다. 이 챕터에서 광선이 표면을 어느 쪽에서 만났는지 구분하는 규칙을 도입한다.
+
+이번 챕터에서 새로 등장하는 핵심 개념은 **앞면/뒷면 법선 판별**, 그리고 작은 유틸리티 클래스인 **`interval`** 이다.
+
+---
+
+### 추상화의 그림 — `hittable` 인터페이스
+
+```
+        ┌─────────────────┐
+        │   hittable      │  ← 추상 클래스 (인터페이스)
+        │   - hit(...)    │
+        └────────┬────────┘
+                 │ (상속)
+        ┌────────┼────────┐
+        ▼        ▼        ▼
+     sphere  triangle  mesh   (구체적 구현체들)
+```
+
+광선이 어느 오브젝트에 맞았을 때 필요한 정보를 한 묶음으로:
+
+```cpp
+struct hit_record {
+    point3 p;          // 충돌 지점
+    vec3   normal;     // 법선 (광선의 반대쪽을 향하도록 정렬됨)
+    double t;          // 광선 위의 거리
+    bool   front_face; // 앞면을 맞았는가?
+};
+```
+
+`hittable_list`는 여러 `hittable`을 담은 컨테이너다. 자기도 `hittable`을 상속해서, 자기 자신을 마치 하나의 거대한 오브젝트처럼 다룰 수 있다.
+
+---
+
+### 새로운 수학 개념: 앞면 vs 뒷면 법선 판별
+
+#### ① 왜 이게 필요한가?
+
+조명 계산에서 법선은 **항상 광선의 반대쪽**을 향해야 한다.
+이유: `NdotL` (법선 · 광원 방향) 같은 내적은 "표면이 광원을 얼마나 정면으로 마주하는가"를 측정한다. 법선이 표면 안쪽을 향하면 부호가 뒤집혀 어두워야 할 곳이 밝아지는 식의 오류가 난다.
+
+구 표면에서 단순히 $(P - C) / r$ 로 계산한 법선은 **항상 바깥**을 향한다.
+- 광선이 밖에서 들어와서 부딪히면 → 광선과 법선이 **반대 방향** → OK ✓
+- 광선이 안에서 나가다 부딪히면 → 광선과 법선이 **같은 방향** → 뒤집어야 함 ✗
+
+#### ② 일상 비유
+
+선풍기 앞에 손바닥을 펼친다고 상상하자. 손등이 선풍기를 향하면 바람이 손등을 때린다. 손바닥이 선풍기를 향해야 정면으로 바람을 맞는다.
+**"법선(손바닥이 가리키는 방향)은 들어오는 바람(광선)의 반대 방향이어야 한다."** 이게 우리가 강제하고 싶은 규칙이다.
+
+#### ③ 단계별 전개 — 내적 부호로 어떻게 판별하나?
+
+광선 방향을 $\mathbf{d}$, 외향 법선(밖으로 향하는 법선)을 $\mathbf{n}_{out}$ 이라고 하자.
+
+$$\mathbf{d} \cdot \mathbf{n}_{out} = |\mathbf{d}||\mathbf{n}_{out}|\cos\theta$$
+
+길이는 양수이므로 부호는 $\cos\theta$ 가 결정한다.
+
+| $\theta$ 범위 | $\cos\theta$ | 내적 부호 | 기하학적 의미 |
+|---|---|---|---|
+| 0° ~ 90° | 양수 | $\mathbf{d} \cdot \mathbf{n}_{out} > 0$ | 광선과 법선이 같은 쪽을 향함 → **광선이 안에서 나감** (뒷면) |
+| 90° | 0 | 0 | 광선이 표면을 스침 |
+| 90° ~ 180° | 음수 | $\mathbf{d} \cdot \mathbf{n}_{out} < 0$ | 광선과 법선이 반대쪽을 향함 → **광선이 밖에서 들어옴** (앞면) |
+
+규칙:
+- `dot(d, n_out) < 0` → **앞면 (front_face = true)**, 법선은 $\mathbf{n}_{out}$ 그대로
+- `dot(d, n_out) > 0` → **뒷면 (front_face = false)**, 법선은 $-\mathbf{n}_{out}$ (뒤집기)
+
+#### ④ 구체적 숫자 예시
+
+광선이 오른쪽으로 직진: $\mathbf{d} = (1, 0, 0)$.
+
+**경우 A — 광선이 구의 왼쪽 면에 부딪힘 (밖→안)**
+충돌점은 구 중심 왼쪽이므로 외향 법선 $\mathbf{n}_{out} = (-1, 0, 0)$.
+
+$$\mathbf{d} \cdot \mathbf{n}_{out} = 1 \times (-1) + 0 + 0 = -1$$
+
+음수 → **앞면**. 법선 그대로 $(-1, 0, 0)$ 사용.
+
+**경우 B — 광선이 구의 오른쪽 면에 부딪힘 (안→밖)**
+충돌점은 구 중심 오른쪽이므로 외향 법선 $\mathbf{n}_{out} = (1, 0, 0)$.
+
+$$\mathbf{d} \cdot \mathbf{n}_{out} = 1 \times 1 + 0 + 0 = +1$$
+
+양수 → **뒷면**. 법선을 뒤집어 $(-1, 0, 0)$ 사용.
+
+두 경우 모두 최종 법선은 광선($+x$ 방향)의 **반대 방향**($-x$)을 향한다 ✓.
+
+![앞면/뒷면 법선](diagrams/front_back_face.png)
+
+#### ⑤ 코드와 연결
+
+```cpp
+inline void set_face_normal(const ray& r, const vec3& outward_normal) {
+    // outward_normal 은 항상 단위 벡터라고 가정 (호출자 책임)
+    front_face = dot(r.direction(), outward_normal) < 0;
+    normal     = front_face ? outward_normal : -outward_normal;
+}
+```
+
+| 수식 | 코드 |
+|------|------|
+| $\mathbf{d}$ | `r.direction()` |
+| $\mathbf{n}_{out}$ | `outward_normal` |
+| $\mathbf{d} \cdot \mathbf{n}_{out} < 0$ | `dot(r.direction(), outward_normal) < 0` |
+| 법선 뒤집기 | `front_face ? outward_normal : -outward_normal` |
+
+> **설계 결정 — 누가 외향 법선을 만드나?**
+> `set_face_normal` 호출자(즉 `sphere::hit`)가 외향 법선을 단위 벡터로 만들어 넘긴다.
+> 이유: 오브젝트마다 외향 법선을 효율적으로 계산하는 방법이 다르다 (구는 `(P-C)/r`, 평면은 미리 저장된 상수).
+> 인터페이스를 일반화하기보다 **각 오브젝트가 자기에게 최적인 방식으로 만들도록** 한다.
+
+---
+
+### 여러 오브젝트 중 가장 가까운 충돌 찾기
+
+#### 왜 "가장 가까운" 것이 필요한가?
+
+광선이 여러 오브젝트를 동시에 통과할 수 있다.
+하지만 우리가 카메라로 보는 건 **가장 앞에 있는 표면**뿐이다 (뒤쪽은 가려져 안 보인다).
+
+알고리즘의 핵심: **`closest`라는 임시 t 상한값을 들고 다니며**, 더 가까운 충돌을 발견할 때마다 갱신한다.
+
+```cpp
+double closest = t_max;
+for (auto& obj : objects) {
+    if (obj->hit(r, t_min, closest, temp_rec)) {
+        closest = temp_rec.t;   // 다음 오브젝트는 이보다 가까운 충돌만 인정
+        rec = temp_rec;
+    }
+}
+```
+
+이렇게 하면 단 한 번의 순회로 가장 가까운 충돌을 찾는다. 정렬 없이 O(n).
+
+![가장 가까운 충돌 찾기](diagrams/closest_hit.png)
+
+---
+
+### `interval` 클래스 — t 범위를 한 변수로
+
+지금까지 `t_min`과 `t_max`를 두 개의 매개변수로 다녔다. 이걸 하나의 객체로 묶으면:
+- 매개변수 개수가 줄어 가독성 ↑
+- `surrounds(x)`, `clamp(x)` 같은 범위 관련 유틸을 한 곳에 모을 수 있음
+
+```cpp
+class interval {
+public:
+    double min, max;
+    interval(double mn, double mx) : min(mn), max(mx) {}
+    bool surrounds(double x) const { return min < x && x < max; }
+    bool contains(double x)  const { return min <= x && x <= max; }
+};
+```
+
+`surrounds` 와 `contains` 의 차이는 경계 포함 여부다. 광선 충돌에서는 t가 정확히 t_min 일 때(자기 자신에게 충돌) 같은 케이스를 배제하기 위해 보통 `surrounds` 를 쓴다.
+
+---
+
+### 클래스 구성 — 누가 누구를 호출하나?
+
+```
+ray_color(r, world)
+    └─ world.hit(r, [0, infinity], rec)        ← world 는 hittable_list
+         ├─ sphere1.hit(r, [0, closest], temp) ← 가장 가까운 충돌 갱신
+         ├─ sphere2.hit(r, [0, closest], temp)
+         └─ ...
+              └─ rec.set_face_normal(r, outward_normal)  ← 앞/뒷면 판별
+```
+
+---
+
+### 결과물
+
+![Ch.5 다중 오브젝트](pbr-raytracer/cmake-build-debug-visual-studio/output/ch5_normals.png)
+
+씬에 큰 땅 구(반지름 100, 아래쪽) + 작은 구(반지름 0.5, 정면) 두 개를 배치했다.
+두 구 모두 같은 `ray_color` 코드 한 줄 (`world.hit(...)`)로 처리된다.
+
+- 작은 구: 표면 법선이 `(P-C)/r` 로 방향마다 다르므로 RGB 그라디언트로 보인다
+- 땅 구: 카메라 시야에 들어오는 부분은 모두 위쪽 면(+Y 방향)이므로 초록(G채널)이 지배적이다
+- `hittable` 추상화 덕분에 오브젝트가 100개여도 `ray_color` 코드는 그대로다
+
+### 관련 파일
+- [src/hittable.h](pbr-raytracer/src/hittable.h) (이번 챕터에서 추가)
+- [src/sphere.h](pbr-raytracer/src/sphere.h) (이번 챕터에서 추가)
+- [src/hittable_list.h](pbr-raytracer/src/hittable_list.h) (이번 챕터에서 추가)
+- [src/interval.h](pbr-raytracer/src/interval.h) (이번 챕터에서 추가)
+- [src/rtweekend.h](pbr-raytracer/src/rtweekend.h) (이번 챕터에서 추가)
+- [src/main.cpp](pbr-raytracer/src/main.cpp) (리팩토링)
