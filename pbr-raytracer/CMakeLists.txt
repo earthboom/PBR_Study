@@ -10,10 +10,12 @@ add_executable(raytracer
     src/vec3.h
     src/ray.h
     src/interval.h
+    src/color.h
     src/rtweekend.h
     src/hittable.h
     src/hittable_list.h
     src/sphere.h
+    src/camera.h
 )
 
 target_compile_options(raytracer PRIVATE /utf-8)

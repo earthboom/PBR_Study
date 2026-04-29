@@ -1,0 +1,4 @@
+{
+    "cmake.sourceDirectory": "${workspaceFolder}/pbr-raytracer",
+    "cmake.buildDirectory":  "${workspaceFolder}/pbr-raytracer/build"
+}

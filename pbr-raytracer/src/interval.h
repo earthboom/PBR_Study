@@ -23,6 +23,15 @@ public:
     // 광선 충돌에서 자기 자신과의 충돌(t=0)을 배제할 때 주로 사용.
     bool surrounds(double x) const { return min < x && x < max; }
 
+    // x 를 [min, max] 안으로 잘라낸다 (clamping).
+    // 색상값을 [0, 1] 범위로 강제할 때 사용.
+    double clamp(double x) const
+    {
+        if (x < min) return min;
+        if (x > max) return max;
+        return x;
+    }
+
     // 자주 쓰는 미리 정의된 구간들
     static const interval empty;
     static const interval universe;

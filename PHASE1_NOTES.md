@@ -771,3 +771,165 @@ ray_color(r, world)
 - [src/interval.h](pbr-raytracer/src/interval.h) (이번 챕터에서 추가)
 - [src/rtweekend.h](pbr-raytracer/src/rtweekend.h) (이번 챕터에서 추가)
 - [src/main.cpp](pbr-raytracer/src/main.cpp) (리팩토링)
+
+---
+
+## Ch.6 — 안티에일리어싱 (Antialiasing)
+
+### 왜 이걸 하는가?
+
+Ch.5의 결과 이미지를 자세히 보면 구의 가장자리가 **계단처럼 톱니** 모양이다.
+원인: 한 픽셀당 광선을 **딱 한 개**, 그것도 **픽셀 정중앙**으로만 쐈기 때문이다.
+
+이게 왜 문제인가? 한 픽셀의 영역 안에 구가 30%만 차 있다고 하자. 픽셀 중심에서 쏜 광선 하나가 구를 맞히면 그 픽셀은 **100% 구 색**, 빗맞으면 **100% 배경 색**이다. 중간이 없다. 결과적으로 가장자리가 0/100으로 뚝 끊긴다.
+
+이번 챕터의 목표: 픽셀 안의 **여러 위치**에 광선을 쏘고 색의 **평균**을 내자. 그러면 30%가 구를 맞히면 자연스럽게 30% 구색 + 70% 배경색이 섞여 부드러운 가장자리가 된다.
+
+![에일리어싱 비교](diagrams/aliasing.png)
+
+---
+
+### 새로운 수학 개념: 픽셀 내 무작위 샘플링과 평균
+
+#### ① 왜 이게 필요한가?
+
+위의 그림처럼 픽셀 중심 1개로는 "그 픽셀 영역 안의 색"을 잘 대표하지 못한다. 픽셀은 점이 아니라 **작은 사각형 영역**이고, 그 영역에 들어오는 빛의 평균이 그 픽셀의 진짜 색이다.
+
+수식으로 쓰면 픽셀의 진짜 색은 적분이다:
+
+$$\text{픽셀 색} = \frac{1}{\text{픽셀 면적}} \iint_{\text{픽셀}} \text{ray\_color}(x, y) \, dx \, dy$$
+
+이걸 정확히 계산할 수는 없으므로, 무작위 샘플로 **근사**한다 (몬테카를로 추정):
+
+$$\text{픽셀 색} \approx \frac{1}{N} \sum_{k=1}^{N} \text{ray\_color}(x_k, y_k)$$
+
+#### ② 일상 비유
+
+흐릿한 사진을 찍는 두 가지 방식을 떠올려보자:
+- **방법 A**: 셔터를 1/1000초로 한 번 찍고 결과를 저장 → 그 순간만 포착
+- **방법 B**: 셔터를 1/1000초로 100번 찍고 평균 → 흔들림과 노이즈가 줄고 부드러움
+
+레이트레이싱의 안티에일리어싱이 정확히 방법 B다. 픽셀 안의 다양한 위치에서 빛을 여러 번 "찍고" 평균을 낸다.
+
+#### ③ 단계별 전개 — 픽셀 안 무작위 위치는 어떻게 만드나?
+
+지금까지 픽셀 (i, j)의 중심 위치는:
+
+$$\text{pixel\_center} = \text{pixel00\_loc} + i \cdot \text{pixel\_delta\_u} + j \cdot \text{pixel\_delta\_v}$$
+
+여기서 $i$, $j$ 는 정수다. 픽셀 안의 임의 위치를 가지려면 정수 대신 **연속된 실수**로 만들면 된다:
+
+$$\text{sample\_pos} = \text{pixel00\_loc} + (i + dx) \cdot \text{pixel\_delta\_u} + (j + dy) \cdot \text{pixel\_delta\_v}$$
+
+여기서 $dx, dy$ 는 $[0, 1)$ 범위의 무작위 실수.
+- $dx = 0, dy = 0$ → 픽셀의 왼쪽 위 모서리
+- $dx = 0.5, dy = 0.5$ → 픽셀 중심 (Ch.5의 방식)
+- $dx = 0.99, dy = 0.99$ → 픽셀의 오른쪽 아래 모서리 근처
+
+![픽셀 내부 샘플링](diagrams/pixel_sampling.png)
+
+#### ④ 구체적 숫자 예시
+
+이미지 너비 400, 뷰포트 너비 3.55라 가정 → `pixel_delta_u = 3.55 / 400 = 0.008875`.
+
+픽셀 (i=100, j=50) 안에 샘플 3개를 만들어보자:
+
+| 샘플 | dx | dy | i + dx | j + dy | 픽셀 안 어느 위치인가? |
+|------|-----|-----|--------|--------|--------------------|
+| 1 | 0.231 | 0.812 | 100.231 | 50.812 | 왼쪽 위쪽 |
+| 2 | 0.674 | 0.105 | 100.674 | 50.105 | 오른쪽 아래쪽 |
+| 3 | 0.418 | 0.526 | 100.418 | 50.526 | 거의 중앙 |
+
+이 3개 위치 각각에서 광선을 쏘고 ray_color를 받는다. 그 색 3개를 더해서 3으로 나눈 값이 픽셀 (100, 50)의 최종 색.
+
+#### ⑤ 코드와 연결
+
+샘플 1개를 만들어 광선을 반환하는 함수 (camera 클래스 안에 들어갈 메서드):
+
+```cpp
+ray get_ray(int i, int j) const {
+    vec3 offset = sample_square();                          // (dx-0.5, dy-0.5, 0)
+    point3 pixel_sample = pixel00_loc
+                        + ((i + offset.x()) * pixel_delta_u)
+                        + ((j + offset.y()) * pixel_delta_v);
+    return ray(center, pixel_sample - center);
+}
+
+vec3 sample_square() const {
+    // [-0.5, +0.5) 범위 사각형 안의 무작위 점 (z=0)
+    return vec3(random_double() - 0.5, random_double() - 0.5, 0);
+}
+```
+
+> 실제 구현에서는 `[0, 1)` 대신 `[-0.5, +0.5)` 를 쓴다. 이러면 `(i, j)` 가 픽셀 **중심** 좌표가 되고 샘플은 그 주변에 균등 분포한다. 의미는 동일.
+
+| 수식 | 코드 |
+|------|------|
+| $dx, dy$ | `random_double()` 결과 |
+| $(i + dx, j + dy)$ | `(i + offset.x(), j + offset.y())` |
+| $\text{sample\_pos}$ | `pixel_sample` |
+| $\frac{1}{N}\sum$ | 색을 누적해 `samples_per_pixel`로 나눔 |
+
+---
+
+### `random_double()` — 0~1 무작위 실수
+
+C++ 표준 라이브러리 사용. 단순하게 시작:
+
+```cpp
+inline double random_double() {
+    // [0, 1) 범위의 균등분포 실수
+    return std::rand() / (RAND_MAX + 1.0);
+}
+```
+
+> `RAND_MAX + 1.0` 으로 나누는 이유: `std::rand()` 는 [0, RAND_MAX] 정수를 돌려준다. 그대로 RAND_MAX로 나누면 결과 범위가 `[0, 1]` (1 포함) 이라 가끔 1.0이 나온다. `+1.0`으로 분모를 키우면 결과가 `[0, 1)` 이 되어 1을 절대 포함하지 않는다.
+
+나중에 더 좋은 PRNG가 필요해지면 `std::mt19937` (Mersenne Twister)로 교체하면 된다 — 인터페이스(함수 시그니처)만 같으면 호출하는 쪽 코드는 한 줄도 안 바뀐다.
+
+---
+
+### `camera` 클래스로 분리 — 이번 챕터의 진짜 핵심
+
+지금까지 main.cpp 안에 카메라 설정, 뷰포트 계산, 픽셀 순회 루프, 광선 발사가 모두 흩어져 있었다. 이걸 모두 `camera` 클래스 하나로 묶는다.
+
+```
+[Ch.5 main.cpp 구조]            [Ch.6 main.cpp 구조]
+- 이미지 크기 설정              - 씬 만들기
+- 뷰포트 계산                   - 카메라 설정 (3~4줄)
+- 픽셀 순회 루프      ────→     - camera.render(world)
+- 광선 발사                       끝.
+- 색상 출력
+```
+
+**왜 이게 중요한가?**
+- main.cpp는 **"무엇을 그릴지"**(씬)만 신경 쓴다. **"어떻게 그릴지"**(픽셀 순회/샘플링/광선 발사)는 camera가 모두 처리.
+- 다음 챕터들에서 카메라 기능이 추가될 때(이동 가능한 카메라, defocus blur 등) main.cpp는 거의 변하지 않는다.
+- 한 씬을 다른 카메라 설정으로 여러 번 렌더하기 쉬워진다.
+
+`camera` 클래스가 책임지는 일:
+1. **public 입력**: `aspect_ratio`, `image_width`, `samples_per_pixel`
+2. **`render(const hittable& world)`**: 모든 픽셀을 순회하며 PPM 출력
+3. **`initialize()`** (private): 뷰포트, 픽셀 델타 등 내부 값 계산
+4. **`get_ray(i, j)`** (private): 픽셀 (i, j) 안의 무작위 샘플로 광선 1개 생성
+5. **`ray_color(r, world)`** (private): 광선의 색 결정 (Ch.5에서 가져옴)
+
+---
+
+### 결과물
+
+![Ch.6 안티에일리어싱](pbr-raytracer/results/ch6_aa.png)
+
+`samples_per_pixel = 100` 으로 설정. Ch.5의 결과와 같은 씬이지만 **구의 가장자리가 톱니 없이 부드럽다.**
+픽셀 하나당 무작위 위치 100개에서 광선을 쏘고 색의 평균을 냈기 때문이다.
+
+대신 렌더 시간은 Ch.5의 ~100배 (광선이 100배 많아짐). Debug 빌드면 1~3분, Release 빌드면 수십 초.
+
+또 한 가지 큰 변화 — `main.cpp`가 30줄로 줄어들었다. 카메라/뷰포트/픽셀 순회/샘플링/광선 발사가 모두 `camera` 클래스 안에 캡슐화됐다.
+
+### 관련 파일
+- [src/camera.h](pbr-raytracer/src/camera.h) (이번 챕터에서 추가, 메인 작업)
+- [src/color.h](pbr-raytracer/src/color.h) (이번 챕터에서 추가, `write_color()` + 클램핑)
+- [src/interval.h](pbr-raytracer/src/interval.h) (`clamp()` 추가)
+- [src/rtweekend.h](pbr-raytracer/src/rtweekend.h) (`random_double()` 추가)
+- [src/main.cpp](pbr-raytracer/src/main.cpp) (대폭 단순화)

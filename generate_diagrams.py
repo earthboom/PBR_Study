@@ -716,4 +716,188 @@ plt.savefig("diagrams/closest_hit.png", dpi=120, bbox_inches='tight')
 plt.close()
 print("closest_hit.png 생성 완료")
 
+# ── 11. 에일리어싱 vs 안티에일리어싱 ──────────────────────────────────────────
+fig, axes = plt.subplots(1, 2, figsize=(14, 7))
+fig.suptitle('에일리어싱 — 픽셀당 1샘플 vs N샘플 평균', fontsize=14, fontweight='bold')
+
+# 격자 크기와 가상 구의 윤곽
+W_grid, H_grid = 16, 10
+sphere_cx, sphere_cy = 8.5, 5.0
+sphere_r = 4.5
+
+np.random.seed(42)
+
+def is_inside_sphere(x, y):
+    return (x - sphere_cx)**2 + (y - sphere_cy)**2 <= sphere_r**2
+
+# ── 왼쪽: 1샘플 (계단 현상)
+ax = axes[0]
+ax.set_title('① 픽셀당 1샘플 — 계단 현상 (Aliasing)', fontsize=11)
+
+for i in range(W_grid):
+    for j in range(H_grid):
+        cx, cy = i + 0.5, j + 0.5
+        # 픽셀 중심에서만 샘플 → 0 또는 1
+        inside = is_inside_sphere(cx, cy)
+        color = '#3498db' if inside else '#ecf0f1'
+        ax.add_patch(patches.Rectangle((i, j), 1, 1, color=color,
+                                       edgecolor='#bdc3c7', lw=0.5))
+        ax.plot(cx, cy, 'o', color='#e74c3c', markersize=3, zorder=5)
+
+# 진짜 구 윤곽 (참고용)
+theta = np.linspace(0, 2*np.pi, 200)
+ax.plot(sphere_cx + sphere_r*np.cos(theta),
+        sphere_cy + sphere_r*np.sin(theta),
+        '--', color='#27ae60', lw=2, label='실제 구 윤곽')
+
+ax.set_xlim(-0.5, W_grid + 0.5)
+ax.set_ylim(-0.5, H_grid + 0.5)
+ax.set_aspect('equal')
+ax.legend(fontsize=9, loc='upper right')
+ax.text(W_grid/2, -1.0, '각 픽셀 → 검정 또는 파랑 (이진)\n경계가 톱니처럼 보임',
+        ha='center', fontsize=10, color='#c0392b', fontweight='bold')
+ax.axis('off')
+
+# ── 오른쪽: N샘플 평균 (부드러움)
+ax = axes[1]
+ax.set_title('② 픽셀당 9샘플 평균 — 부드러움 (Anti-aliasing)', fontsize=11)
+
+samples_per_pixel = 9
+
+for i in range(W_grid):
+    for j in range(H_grid):
+        # 픽셀 안의 무작위 9개 위치
+        offsets_x = np.random.uniform(0, 1, samples_per_pixel)
+        offsets_y = np.random.uniform(0, 1, samples_per_pixel)
+        sample_xs = i + offsets_x
+        sample_ys = j + offsets_y
+
+        # 평균 = 구 안에 들어간 샘플 비율 (0.0 ~ 1.0)
+        inside_count = sum(is_inside_sphere(sx, sy)
+                          for sx, sy in zip(sample_xs, sample_ys))
+        ratio = inside_count / samples_per_pixel
+
+        # 비율에 따라 흰색~파랑 보간
+        r_col = (1 - ratio) * 0.93 + ratio * 0.20
+        g_col = (1 - ratio) * 0.94 + ratio * 0.60
+        b_col = (1 - ratio) * 0.96 + ratio * 0.86
+        ax.add_patch(patches.Rectangle((i, j), 1, 1,
+                                       color=(r_col, g_col, b_col),
+                                       edgecolor='#bdc3c7', lw=0.5))
+
+        # 9개 샘플 점 (작게)
+        ax.plot(sample_xs, sample_ys, 'o', color='#e74c3c',
+                markersize=1.2, alpha=0.6, zorder=5)
+
+ax.plot(sphere_cx + sphere_r*np.cos(theta),
+        sphere_cy + sphere_r*np.sin(theta),
+        '--', color='#27ae60', lw=2, label='실제 구 윤곽')
+
+ax.set_xlim(-0.5, W_grid + 0.5)
+ax.set_ylim(-0.5, H_grid + 0.5)
+ax.set_aspect('equal')
+ax.legend(fontsize=9, loc='upper right')
+ax.text(W_grid/2, -1.0, '각 픽셀 → 9개 샘플 평균 (연속)\n경계가 부드럽게 그라디언트',
+        ha='center', fontsize=10, color='#27ae60', fontweight='bold')
+ax.axis('off')
+
+plt.tight_layout()
+plt.savefig("diagrams/aliasing.png", dpi=120, bbox_inches='tight')
+plt.close()
+print("aliasing.png 생성 완료")
+
+# ── 12. 픽셀 내부 샘플링 좌표 변환 ────────────────────────────────────────────
+fig, axes = plt.subplots(1, 2, figsize=(13, 6.5))
+fig.suptitle('픽셀 내부 샘플링 — 한 픽셀 안의 무작위 위치 선택', fontsize=14, fontweight='bold')
+
+# ── 왼쪽: 픽셀 (i, j) 한 개를 확대
+ax = axes[0]
+ax.set_title('① 픽셀 (i, j) 확대 — 샘플 위치', fontsize=11)
+
+# 픽셀 정사각형 (큰 사각형)
+ax.add_patch(patches.Rectangle((0, 0), 1, 1, facecolor='#fdfefe',
+                               edgecolor='#34495e', lw=2.5))
+
+# 인접 픽셀 일부 (회색)
+for di, dj in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+    ax.add_patch(patches.Rectangle((di, dj), 1, 1, facecolor='#ecf0f1',
+                                   edgecolor='#bdc3c7', lw=0.8, alpha=0.5))
+
+# 픽셀 중심 (Ch.5 방식 — 1개 샘플)
+ax.plot(0.5, 0.5, '*', color='#9b59b6', markersize=22, zorder=6,
+        markeredgecolor='black', markeredgewidth=0.8)
+ax.text(0.5, -0.18, 'Ch.5 방식: 픽셀 중심 1개만',
+        ha='center', fontsize=9, color='#9b59b6', fontweight='bold')
+
+# 픽셀 안 무작위 샘플 N개 (Ch.6 방식)
+np.random.seed(7)
+N = 12
+sample_x = np.random.uniform(0, 1, N)
+sample_y = np.random.uniform(0, 1, N)
+ax.plot(sample_x, sample_y, 'o', color='#e74c3c', markersize=8,
+        markeredgecolor='black', markeredgewidth=0.5, zorder=7,
+        label=f'Ch.6 방식: 무작위 {N}개')
+
+# 한 샘플에 좌표 라벨
+sample0 = (sample_x[0], sample_y[0])
+ax.annotate(f'(i + dx,\n j + dy)\n  dx, dy ∈ [0, 1)',
+            xy=sample0, xytext=(sample0[0] + 0.4, sample0[1] + 0.5),
+            fontsize=9, color='#c0392b', fontweight='bold',
+            arrowprops=dict(arrowstyle='-|>', color='#c0392b', lw=1.2))
+
+# pixel_delta_u, pixel_delta_v 표시
+ax.annotate("", xy=(1.05, -0.08), xytext=(0, -0.08),
+            arrowprops=dict(arrowstyle="<->", color='#e67e22', lw=1.5))
+ax.text(0.5, -0.32, 'pixel_delta_u', ha='center', fontsize=9, color='#e67e22')
+
+ax.annotate("", xy=(-0.08, 1.05), xytext=(-0.08, 0),
+            arrowprops=dict(arrowstyle="<->", color='#e67e22', lw=1.5))
+ax.text(-0.32, 0.5, 'pixel_delta_v',
+        rotation=90, ha='center', va='center', fontsize=9, color='#e67e22')
+
+# 픽셀 인덱스 라벨
+ax.text(0.5, 1.08, '픽셀 (i, j)', ha='center', fontsize=11,
+        color='#2c3e50', fontweight='bold')
+
+ax.set_xlim(-1.3, 2.3)
+ax.set_ylim(-0.7, 1.8)
+ax.set_aspect('equal')
+ax.legend(fontsize=9, loc='lower right')
+ax.axis('off')
+
+# ── 오른쪽: 좌표 변환 공식
+ax = axes[1]
+ax.set_title('② 샘플 위치 → 3D 좌표 변환', fontsize=11)
+ax.axis('off')
+
+formula = (
+    '단계별 변환:\n\n'
+    '1. 픽셀 안 무작위 오프셋 생성\n'
+    '   dx, dy ← random in [0, 1)\n\n'
+    '2. 픽셀 인덱스 + 오프셋 = 연속 인덱스\n'
+    '   (i + dx, j + dy)\n\n'
+    '3. 뷰포트 위 3D 좌표로 변환\n'
+    '   sample_pos = pixel00_loc\n'
+    '              + (i + dx) × pixel_delta_u\n'
+    '              + (j + dy) × pixel_delta_v\n\n'
+    '4. 광선 만들기\n'
+    '   ray r(camera_origin,\n'
+    '         sample_pos - camera_origin)\n\n'
+    '─ 위 과정을 픽셀당 N번 반복하고 ─\n'
+    '─ 색상 N개의 평균을 픽셀 색으로 사용 ─'
+)
+
+ax.text(0.05, 0.95, formula, fontsize=10.5, va='top', ha='left',
+        color='#2c3e50',
+        bbox=dict(boxstyle='round,pad=0.8', facecolor='#fdfefe',
+                  edgecolor='#bdc3c7', lw=1))
+
+ax.set_xlim(0, 1)
+ax.set_ylim(0, 1)
+
+plt.tight_layout()
+plt.savefig("diagrams/pixel_sampling.png", dpi=120, bbox_inches='tight')
+plt.close()
+print("pixel_sampling.png 생성 완료")
+
 print("\n모든 다이어그램 생성 완료 → diagrams/ 폴더")
