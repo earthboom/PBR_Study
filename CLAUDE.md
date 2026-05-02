@@ -104,6 +104,9 @@ python -c "from PIL import Image; Image.open('path/to/file.ppm').save('path/to/f
 - 다중 수식 블록(`$$...$$`) 안에서 줄 맨 앞에 `+`를 쓰지 않는다 — 마크다운이 리스트로 오인한다.
   - 나쁜 예: `$$\n첫 줄\n+ 둘째 줄\n$$`
   - 좋은 예: 한 줄로 쓰거나 `\begin{aligned}` 환경을 사용한다.
+- **`\text{}` 안에 언더스코어(`_`)를 절대 쓰지 않는다** — GitHub의 KaTeX 렌더러가 `'_' allowed only in math mode` 에러를 내고 수식 전체가 깨진다.
+  - 나쁜 예: `\text{pixel\_center}`, `\text{ray\_color}`
+  - 좋은 예: 코드 변수명은 `\text{}` 밖에서 백틱으로 쓰거나, 수식 기호로 대체한다 (`P_{ij}`, $\Delta u$ 등). 기호-코드 대응은 괄호나 표로 별도 명시한다.
 - 수식 다음에는 반드시 한국어로 "이 수식이 의미하는 것"을 한 문장 이상 설명한다.
 
 ### 작성 예시 (Ch.4 광선-구 교차)

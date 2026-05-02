@@ -813,13 +813,13 @@ $$\text{픽셀 색} \approx \frac{1}{N} \sum_{k=1}^{N} C(x_k, y_k)$$
 
 #### ③ 단계별 전개 — 픽셀 안 무작위 위치는 어떻게 만드나?
 
-지금까지 픽셀 (i, j)의 중심 위치는:
+지금까지 픽셀 (i, j)의 중심 위치는 ($P_{00}$ = `pixel00_loc`, $\Delta u$ = `pixel_delta_u`, $\Delta v$ = `pixel_delta_v`):
 
-$$\text{pixel\_center} = \text{pixel00\_loc} + i \cdot \text{pixel\_delta\_u} + j \cdot \text{pixel\_delta\_v}$$
+$$P_{ij} = P_{00} + i \cdot \Delta u + j \cdot \Delta v$$
 
 여기서 $i$, $j$ 는 정수다. 픽셀 안의 임의 위치를 가지려면 정수 대신 **연속된 실수**로 만들면 된다:
 
-$$\text{sample\_pos} = \text{pixel00\_loc} + (i + dx) \cdot \text{pixel\_delta\_u} + (j + dy) \cdot \text{pixel\_delta\_v}$$
+$$S_{ij} = P_{00} + (i + dx) \cdot \Delta u + (j + dy) \cdot \Delta v$$
 
 여기서 $dx, dy$ 는 $[0, 1)$ 범위의 무작위 실수.
 - $dx = 0, dy = 0$ → 픽셀의 왼쪽 위 모서리
@@ -867,7 +867,7 @@ vec3 sample_square() const {
 |------|------|
 | $dx, dy$ | `random_double()` 결과 |
 | $(i + dx, j + dy)$ | `(i + offset.x(), j + offset.y())` |
-| $\text{sample\_pos}$ | `pixel_sample` |
+| $S_{ij}$ | `pixel_sample` |
 | $\frac{1}{N}\sum$ | 색을 누적해 `samples_per_pixel`로 나눔 |
 
 ---
