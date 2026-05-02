@@ -1266,7 +1266,7 @@ inline void write_color(std::ostream& out, const color& pixel_color) {
 
 ### 결과물
 
-![Ch.7 Diffuse](pbr-raytracer/output/ch7_diffuse.png)
+![Ch.7 Diffuse](pbr-raytracer/results/ch7_diffuse.png)
 
 Ch.6(법선 색)과 비교:
 
