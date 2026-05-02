@@ -30,7 +30,7 @@ PBR_Study/
 ├── PHASE1_NOTES.md        ← Phase 1 챕터별 학습 노트
 ├── generate_diagrams.py   ← 학습 다이어그램 생성
 ├── diagrams/              ← 생성된 다이어그램 이미지
-├── pbr4ed/                ← PBR 4th Edition 웹버전
+├── pbr4ed/                ← PBR 4th Edition 웹버전cm
 └── pbr-raytracer/         ← Phase 1 실습 프로젝트
     ├── CMakeLists.txt
     └── src/

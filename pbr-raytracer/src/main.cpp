@@ -21,8 +21,10 @@ int main()
     cam.samples_per_pixel = 100;   // 픽셀당 샘플 수 — 안티에일리어싱
 
     // ── 렌더링 ───────────────────────────────────────────────────
-    std::filesystem::create_directories("output");
-    std::ofstream out("output/ch6_aa.ppm");
+    // PROJECT_SOURCE_DIR 은 CMake 가 컴파일 타임에 박아넣은 절대경로 — IDE/CWD 무관하게 동일 위치에 출력
+    const std::filesystem::path out_dir = std::filesystem::path(PROJECT_SOURCE_DIR) / "output";
+    std::filesystem::create_directories(out_dir);
+    std::ofstream out(out_dir / "ch6_aa.ppm");
     if (!out) { std::cerr << "Failed to open output file\n"; return 1; }
 
     cam.render(world, out);

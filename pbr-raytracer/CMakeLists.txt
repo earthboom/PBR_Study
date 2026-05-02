@@ -20,6 +20,11 @@ add_executable(raytracer
 
 target_compile_options(raytracer PRIVATE /utf-8)
 
+# 출력 폴더 경로를 컴파일 타임에 박아넣어 IDE 별 CWD 차이를 무력화한다
+target_compile_definitions(raytracer PRIVATE
+    PROJECT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+
 add_custom_command(TARGET raytracer POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory
     ${CMAKE_SOURCE_DIR}/output
