@@ -1,6 +1,6 @@
 # 학습 진행 상황
 
-## 현재 Phase: Phase 1 진행 중 — 다음 작업: Ch.7 Diffuse Materials
+## 현재 Phase: Phase 1 진행 중 — 다음 작업: Ch.8 Metal
 
 ---
 
@@ -24,8 +24,8 @@
 - [x] Ch.4 Adding a Sphere — 광선-구 교차, 이차방정식, 법선 시각화
 - [x] Ch.5 Surface Normals — hittable 추상화, 앞/뒷면 법선, hittable_list, interval
 - [x] Ch.6 Antialiasing — camera 클래스, 픽셀당 N샘플 평균, random_double, 색상 클램핑
-- [ ] **Ch.7 Diffuse Materials ← 현재 위치**
-- [ ] Ch.8 Metal
+- [x] Ch.7 Diffuse Materials — 람베르트 확산, 재귀 광선 추적, 감마 보정
+- [ ] **Ch.8 Metal ← 현재 위치**
 - [ ] Ch.9 Dielectrics
 - [ ] Ch.10 Positionable Camera
 - [ ] Ch.11 Defocus Blur

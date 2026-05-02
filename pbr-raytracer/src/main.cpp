@@ -19,12 +19,13 @@ int main()
     cam.aspect_ratio      = 16.0 / 9.0;
     cam.image_width       = 400;
     cam.samples_per_pixel = 100;   // 픽셀당 샘플 수 — 안티에일리어싱
+    cam.max_depth         = 50;    // 광선 최대 반사 횟수 — 재귀 깊이 제한
 
     // ── 렌더링 ───────────────────────────────────────────────────
     // PROJECT_SOURCE_DIR 은 CMake 가 컴파일 타임에 박아넣은 절대경로 — IDE/CWD 무관하게 동일 위치에 출력
     const std::filesystem::path out_dir = std::filesystem::path(PROJECT_SOURCE_DIR) / "output";
     std::filesystem::create_directories(out_dir);
-    std::ofstream out(out_dir / "ch6_aa.ppm");
+    std::ofstream out(out_dir / "ch7_diffuse.ppm");
     if (!out) { std::cerr << "Failed to open output file\n"; return 1; }
 
     cam.render(world, out);

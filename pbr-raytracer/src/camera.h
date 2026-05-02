@@ -11,6 +11,7 @@ public:
     double aspect_ratio = 1.0;  // 가로 / 세로 비율
     int image_width = 100;      // 가로 픽셀 수
     int samples_per_pixel = 10; // 픽셀상 샘플 수(안티엘리어싱용)
+    int max_depth = 10;         // 광선이 최대 몇 번 반사될 수 있는가?
 
     // Scene과 출력 스트림을 받아 PPM 출력
     void render(const hittable &world, std::ostream &out)
@@ -29,8 +30,8 @@ public:
                 color pixel_color(0, 0, 0);
                 for (int s = 0; s < samples_per_pixel; s++)
                 {
-                    ray r = get_ray(i, j);
-                    pixel_color += ray_color(r, world);
+                    ray r = get_ray(i, j);                         // 픽셀 안 무작위 위치로 광선 1개 발사
+                    pixel_color += ray_color(r, max_depth, world); // 그 광선의 색을 누적
                 }
                 write_color(out, pixel_samples_scale * pixel_color);
             }
@@ -42,7 +43,7 @@ private:
     int image_height;           // 세로 픽셀 수 (계산됨)
     double pixel_samples_scale; // 1.0 / samples_per_pixel - 평균용 가중치
     point3 center;              // 카메라 위치
-    point3 pixel00_loc;        // (0, 0) 픽셀의 중심 좌표
+    point3 pixel00_loc;         // (0, 0) 픽셀의 중심 좌표
     vec3 pixel_delta_u;         // 가로 한 픽셀 이동량
     vec3 pixel_delta_v;         // 세로 한 픽셀 이동량
 
@@ -75,7 +76,7 @@ private:
     // 픽셀 (i, j) 안의 무작위 위치를 향해 광선 1개를 만든다.
     ray get_ray(int i, int j) const
     {
-        vec3 offset = sample_square(); // [-0.5, +0.5)² 안의 점
+        vec3 offset = sample_square(); // [-0.5, +0.5)² 안의 점 = 픽셀 안 무작위 지점
         point3 pixel_sample = pixel00_loc + ((i + offset.x()) * pixel_delta_u) + ((j + offset.y()) * pixel_delta_v);
         vec3 ray_direction = pixel_sample - center;
         return ray(center, ray_direction);
@@ -89,11 +90,21 @@ private:
     }
 
     // 광선이 Scene과 교차하면 법선으로 색으로, 아니면 하늘 그라디언트
-    color ray_color(const ray &r, const hittable &world) const
+    color ray_color(const ray &r, int depth, const hittable &world) const
     {
+        // 최대 반사 횟수 초과 -> 더 이상 빛을 추적하지 않음, 검정 반환
+        if (depth <= 0)
+            return color(0, 0, 0);
+
         hit_record rec;
-        if (world.hit(r, interval(0.0, infinity), rec))
-            return 0.5 * (rec.normal + color(1, 1, 1));
+        // t_min = 0.001 : 부동소수점 오차로 자기 자신을 다시 때리는 현상(shadow acne) 방지
+        if (world.hit(r, interval(0.001, infinity), rec))
+        {
+            // 법선 기준 반구 위 무작위 방향 -> Diffuse 반사
+            vec3 direction = random_on_hemisphere(rec.normal);
+            // 반사된 광선을 재귀 추적, 0.5 = 표면이 빛의 50% 흡수
+            return 0.5 * ray_color(ray(rec.p, direction), depth - 1, world);
+        }
 
         vec3 unit_dir = unit_vector(r.direction());
         double a = 0.5 * (unit_dir.y() + 1.0);
