@@ -167,3 +167,12 @@ inline vec3 reflect(const vec3 &v, const vec3 &n)
 {
     return v - 2 * dot(v, n) * n;
 }
+
+inline vec3 refract(const vec3 &uv, const vec3 &n, double etai_over_etat)
+{
+    // cos ϴ : 입사 광선(뒤집어서)과 법선의 내적 - 입사각 코사인
+    double cos_theta = fmin(dot(-uv, n), 1.0);
+    vec3 r_out_perp = etai_over_etat * (uv + cos_theta * n);                            // 수직 성분
+    vec3 r_out_parallel = -std::sqrt(std::fabs(1.0 - r_out_perp.length_squared())) * n; // 평행 성분
+    return r_out_perp + r_out_parallel;
+}

@@ -900,4 +900,620 @@ plt.savefig("diagrams/pixel_sampling.png", dpi=120, bbox_inches='tight')
 plt.close()
 print("pixel_sampling.png 생성 완료")
 
+# ── 13. 람베르트 확산 — 반구 위 무작위 산란 방향 ──────────────────────────────
+fig, axes = plt.subplots(1, 2, figsize=(14, 7))
+fig.suptitle('람베르트 확산 (Lambertian Diffuse) — 법선 기준 반구 위 무작위 산란', fontsize=14, fontweight='bold')
+
+# 왼쪽: 산란 방향 분포 시각화
+ax = axes[0]
+ax.set_title('산란 광선 분포 — 법선 방향으로 코사인 가중', fontsize=11)
+
+surface_y = 0.0
+ax.axhline(surface_y, color='#7f8c8d', lw=2.5, label='표면')
+ax.fill_between([-2.5, 2.5], surface_y - 0.6, surface_y, color='#d5dbdb', alpha=0.5)
+
+hit_point = np.array([0.0, 0.0])
+ax.plot(*hit_point, 'o', color='#f39c12', markersize=12, zorder=6)
+ax.text(0.15, -0.25, 'P (충돌점)', fontsize=9, color='#f39c12', fontweight='bold')
+
+# 법선 벡터
+normal = np.array([0.0, 1.0])
+ax.annotate("", xy=hit_point + 1.4 * normal, xytext=hit_point,
+            arrowprops=dict(arrowstyle="-|>", color='#2980b9', lw=2.5))
+ax.text(0.12, 1.45, r'$\hat{n}$ (법선)', fontsize=10, color='#2980b9', fontweight='bold')
+
+# 반구 윤곽
+theta_hemi = np.linspace(0, np.pi, 100)
+ax.plot(np.cos(theta_hemi), np.sin(theta_hemi), '--', color='#bdc3c7', lw=1.5)
+
+# 람베르트 분포에 따른 무작위 방향들 (법선 근처에 더 밀집)
+np.random.seed(42)
+n_rays = 18
+for i in range(n_rays):
+    # 람베르트 코사인 분포: 단위구 위 점 + 법선
+    rand_vec = np.random.randn(2)
+    rand_vec = rand_vec / np.linalg.norm(rand_vec)
+    if rand_vec[1] < 0:
+        rand_vec[1] = -rand_vec[1]
+    scatter = normal + rand_vec
+    scatter = scatter / np.linalg.norm(scatter)
+
+    intensity = max(0, scatter[1])  # 법선과의 내적 (코사인)
+    color = (1 - intensity * 0.7, 1 - intensity * 0.4, 1 - intensity * 0.1)
+    ax.annotate("", xy=hit_point + 0.9 * scatter, xytext=hit_point,
+                arrowprops=dict(arrowstyle="-|>", color=color, lw=1.5, alpha=0.8))
+
+ax.text(0, 1.85, '법선 방향(위)에 가까울수록\n산란 확률이 높다\n(코사인 가중)', ha='center',
+        fontsize=9, color='#2c3e50',
+        bbox=dict(boxstyle='round', facecolor='#fef9e7', edgecolor='#f39c12', alpha=0.9))
+
+ax.set_xlim(-2.5, 2.5)
+ax.set_ylim(-0.8, 2.2)
+ax.set_aspect('equal')
+ax.axis('off')
+
+# 오른쪽: 코드 방식 — 법선 + random_unit_vector()
+ax = axes[1]
+ax.set_title('코드 방식: 법선 + random_unit_vector()', fontsize=11)
+ax.axis('off')
+
+ax.add_patch(patches.FancyBboxPatch((0.02, 0.55), 0.96, 0.42,
+    boxstyle="round,pad=0.02", facecolor='#f8f9fa', edgecolor='#adb5bd'))
+ax.text(0.5, 0.94, '① 단위구 표면 위 무작위 점 S', ha='center', fontsize=10,
+        color='#2c3e50', fontweight='bold', transform=ax.transAxes)
+ax.text(0.5, 0.84, 'S = random_unit_vector()', ha='center', fontsize=10,
+        color='#e74c3c', family='monospace', transform=ax.transAxes)
+
+ax.text(0.5, 0.72, '② 산란 방향 = 법선 + S', ha='center', fontsize=10,
+        color='#2c3e50', fontweight='bold', transform=ax.transAxes)
+ax.text(0.5, 0.62, 'scatter_dir = rec.normal + S', ha='center', fontsize=10,
+        color='#e74c3c', family='monospace', transform=ax.transAxes)
+
+ax.add_patch(patches.FancyBboxPatch((0.02, 0.08), 0.96, 0.42,
+    boxstyle="round,pad=0.02", facecolor='#eaf2ff', edgecolor='#2980b9'))
+ax.text(0.5, 0.46, '왜 법선에 더하는가?', ha='center', fontsize=10,
+        color='#2980b9', fontweight='bold', transform=ax.transAxes)
+ax.text(0.5, 0.35,
+        '단위구 위 점 S를 법선 끝점에서 더하면\n'
+        '법선 방향으로 치우친 반구 분포가 된다.\n'
+        '이것이 람베르트 코사인 법칙과 일치한다:\n'
+        '반사 강도 ∝ cos θ (법선과의 각도)',
+        ha='center', va='center', fontsize=9.5, color='#1a5276',
+        transform=ax.transAxes)
+
+ax.set_xlim(0, 1)
+ax.set_ylim(0, 1)
+
+plt.tight_layout()
+plt.savefig("diagrams/lambertian_diffuse.png", dpi=120, bbox_inches='tight')
+plt.close()
+print("lambertian_diffuse.png 생성 완료")
+
+# ── 14. 재귀 광선 추적 (Recursive Ray Tracing) ────────────────────────────────
+fig, ax = plt.subplots(figsize=(14, 8))
+ax.set_title('재귀 광선 추적 — 광선이 산란될 때마다 깊이(depth)가 줄어든다', fontsize=14, fontweight='bold')
+
+ax.set_xlim(-0.5, 13)
+ax.set_ylim(-0.5, 8.5)
+ax.set_aspect('equal')
+ax.axis('off')
+
+# 카메라
+cam = np.array([0.5, 7.5])
+ax.plot(*cam, 's', color='#2c3e50', markersize=15, zorder=6)
+ax.text(cam[0], cam[1] + 0.4, '카메라\ndepth=50', ha='center', fontsize=9,
+        color='#2c3e50', fontweight='bold')
+
+# 표면들 (y값 다르게)
+surfaces = [
+    {'y': 6.0, 'x0': 1.0, 'x1': 5.0, 'color': '#aed6f1', 'label': '구 A'},
+    {'y': 4.0, 'x0': 3.0, 'x1': 8.0, 'color': '#a9dfbf', 'label': '구 B'},
+    {'y': 2.0, 'x0': 5.5, 'x1': 11.0, 'color': '#f5cba7', 'label': '구 C'},
+]
+
+ray_nodes = [
+    (cam, np.array([3.0, 6.0])),       # depth=50 → 49
+    (np.array([3.0, 6.0]), np.array([6.0, 4.0])),   # depth=49 → 48
+    (np.array([6.0, 4.0]), np.array([8.5, 2.0])),   # depth=48 → 47
+    (np.array([8.5, 2.0]), np.array([11.0, 0.3])),  # depth=47: 배경색 반환
+]
+
+colors = ['#8e44ad', '#2980b9', '#27ae60', '#e67e22']
+depths = [50, 49, 48, 47]
+labels = ['depth=50', 'depth=49', 'depth=48', 'depth=47']
+
+# 표면 선 그리기
+for s in surfaces:
+    ax.plot([s['x0'], s['x1']], [s['y'], s['y']],
+            color='#7f8c8d', lw=3, alpha=0.6)
+    ax.add_patch(patches.FancyBboxPatch(
+        (s['x0'], s['y'] - 0.25), s['x1'] - s['x0'], 0.25,
+        boxstyle="round,pad=0.05", facecolor=s['color'], edgecolor='#7f8c8d',
+        alpha=0.5))
+    ax.text((s['x0'] + s['x1']) / 2, s['y'] - 0.6, s['label'],
+            ha='center', fontsize=9, color='#2c3e50')
+
+# 광선 + 충돌점
+for i, ((src, dst), col, depth) in enumerate(zip(ray_nodes, colors, depths)):
+    ax.annotate("", xy=dst, xytext=src,
+                arrowprops=dict(arrowstyle="-|>", color=col, lw=2.2))
+    mid = (src + dst) / 2
+    ax.text(mid[0] - 0.4, mid[1] + 0.25, labels[i], fontsize=8.5,
+            color=col, fontweight='bold')
+
+    if i < len(ray_nodes) - 1:
+        ax.plot(*dst, 'o', color=col, markersize=10, zorder=6)
+        ax.text(dst[0] + 0.2, dst[1] + 0.25,
+                f'산란 → depth={depths[i]-1}', fontsize=8, color=col)
+    else:
+        ax.plot(*dst, '*', color='#e67e22', markersize=16, zorder=6)
+        ax.text(dst[0] + 0.2, dst[1] + 0.3, '배경색 반환\n(더 이상 교차 없음)',
+                fontsize=8.5, color='#e67e22', fontweight='bold')
+
+# depth=0 종료 박스
+ax.text(6.5, 1.0,
+        'depth = 0 이면 즉시 color(0,0,0) 반환\n→ 더 이상 재귀하지 않음 (무한루프 방지)',
+        ha='center', fontsize=9.5, color='#c0392b',
+        bbox=dict(boxstyle='round', facecolor='#fadbd8', edgecolor='#c0392b', alpha=0.9))
+
+# 반환값 화살표 (역방향)
+ax.annotate("", xy=(2.5, 6.5), xytext=(8.0, 2.5),
+            arrowprops=dict(arrowstyle="-|>", color='#bdc3c7', lw=1.5,
+                            connectionstyle="arc3,rad=-0.3"))
+ax.text(4.5, 5.2, '색상 × 감쇠율\n(attenuation)\n역방향으로 누산', fontsize=8.5,
+        ha='center', color='#7f8c8d',
+        bbox=dict(boxstyle='round', facecolor='white', edgecolor='#bdc3c7', alpha=0.8))
+
+plt.tight_layout()
+plt.savefig("diagrams/recursive_ray.png", dpi=120, bbox_inches='tight')
+plt.close()
+print("recursive_ray.png 생성 완료")
+
+# ── 15. 정반사 벡터 (Reflection Vector) ──────────────────────────────────────
+fig, axes = plt.subplots(1, 2, figsize=(14, 7))
+fig.suptitle(r'정반사 (Specular Reflection) — $v_{ref} = v - 2(v \cdot \hat{n})\hat{n}$', fontsize=14, fontweight='bold')
+
+# 왼쪽: 기하학적 설명
+ax = axes[0]
+ax.set_title('① 벡터 분해 — 법선 성분만 뒤집는다', fontsize=11)
+
+ax.axhline(0, color='#7f8c8d', lw=2.5)
+ax.fill_between([-2.5, 2.5], -0.7, 0, color='#d5dbdb', alpha=0.5)
+
+hit = np.array([0.0, 0.0])
+ax.plot(*hit, 'o', color='#f39c12', markersize=12, zorder=6)
+
+# 입사 벡터 v (왼쪽 위에서 내려옴)
+v = np.array([1.0, -1.0])
+v_norm = v / np.linalg.norm(v)
+ax.annotate("", xy=hit, xytext=hit - 1.4 * v_norm,
+            arrowprops=dict(arrowstyle="-|>", color='#e74c3c', lw=2.5))
+ax.text(-1.3, 1.1, 'v (입사 방향)', fontsize=10, color='#e74c3c', fontweight='bold')
+
+# 법선 n
+n = np.array([0.0, 1.0])
+ax.annotate("", xy=hit + 1.5 * n, xytext=hit,
+            arrowprops=dict(arrowstyle="-|>", color='#2980b9', lw=2.5))
+ax.text(0.12, 1.55, r'$\hat{n}$', fontsize=12, color='#2980b9', fontweight='bold')
+
+# 법선 방향 성분 (v·n)n — 빨간 점선
+dot_vn = np.dot(v_norm, n)  # 음수 (v가 아래로 향함)
+proj = dot_vn * n  # 법선 방향 성분 (아래쪽)
+ax.annotate("", xy=hit + proj, xytext=hit,
+            arrowprops=dict(arrowstyle="-|>", color='#9b59b6', lw=2,
+                            linestyle='dashed'))
+ax.text(0.12, proj[1] / 2, r'$(v \cdot \hat{n})\hat{n}$' + '\n(법선 성분)', fontsize=8.5,
+        color='#9b59b6', fontweight='bold')
+
+# 반사 벡터 v_ref
+v_ref = v_norm - 2 * dot_vn * n
+ax.annotate("", xy=hit + 1.4 * v_ref, xytext=hit,
+            arrowprops=dict(arrowstyle="-|>", color='#27ae60', lw=2.5))
+ax.text(1.0, 1.1, 'v_ref (반사)', fontsize=10, color='#27ae60', fontweight='bold')
+
+# 입사각 = 반사각 표시
+theta_in = np.degrees(np.arctan2(-v_norm[0], v_norm[1]))
+theta_out = np.degrees(np.arctan2(v_ref[0], v_ref[1]))
+arc1 = np.linspace(np.radians(90), np.radians(90 + theta_in), 30)
+arc2 = np.linspace(np.radians(90 - theta_in), np.radians(90), 30)
+ax.plot(0.5 * np.cos(arc1), 0.5 * np.sin(arc1), color='#e74c3c', lw=1.5)
+ax.plot(0.5 * np.cos(arc2), 0.5 * np.sin(arc2), color='#27ae60', lw=1.5)
+ax.text(-0.55, 0.55, 'θ', fontsize=12, color='#e74c3c')
+ax.text(0.45, 0.55, 'θ', fontsize=12, color='#27ae60')
+ax.text(0, -0.5, '입사각 = 반사각 (항상 성립)', ha='center', fontsize=9.5,
+        color='#2c3e50', fontweight='bold')
+
+ax.set_xlim(-2.5, 2.5)
+ax.set_ylim(-0.9, 2.1)
+ax.set_aspect('equal')
+ax.axis('off')
+
+# 오른쪽: 수식 전개
+ax = axes[1]
+ax.set_title('② 수식 전개 — 왜 2를 곱하는가?', fontsize=11)
+ax.axis('off')
+
+steps = [
+    ('v를 두 성분으로 분해', '#2c3e50',
+     'v = v⊥ + v||\n  v|| = (v·n)n   ← 법선 방향 성분\n  v⊥ = v - (v·n)n  ← 법선 수직 성분'),
+    ('반사 = 수직 성분은 유지, 법선 성분만 부호 반전', '#2c3e50',
+     'v_ref = v⊥ + (-v||)\n      = (v - (v·n)n) + (-(v·n)n)\n      = v - 2(v·n)n'),
+    ('코드 구현', '#c0392b',
+     'vec3 reflect(const vec3& v, const vec3& n)\n{\n    return v - 2*dot(v,n)*n;\n}'),
+]
+
+y_pos = 0.92
+for title, tc, body in steps:
+    ax.text(0.05, y_pos, title, fontsize=10, color=tc, fontweight='bold',
+            transform=ax.transAxes)
+    y_pos -= 0.06
+    ax.text(0.07, y_pos, body, fontsize=9.5, color='#1a252f',
+            transform=ax.transAxes,
+            bbox=dict(boxstyle='round,pad=0.4', facecolor='#f8f9fa',
+                      edgecolor='#dee2e6'))
+    y_pos -= 0.22
+
+ax.set_xlim(0, 1)
+ax.set_ylim(0, 1)
+
+plt.tight_layout()
+plt.savefig("diagrams/reflection.png", dpi=120, bbox_inches='tight')
+plt.close()
+print("reflection.png 생성 완료")
+
+# ── 16. Fuzz — 금속 흐림 효과 ─────────────────────────────────────────────────
+fig, axes = plt.subplots(1, 3, figsize=(15, 7))
+fig.suptitle('Fuzz — 반사 방향에 무작위 벡터를 더해 금속 흐림 구현', fontsize=14, fontweight='bold')
+
+fuzz_values = [0.0, 0.3, 0.8]
+titles = ['fuzz = 0.0\n(완벽한 거울)', 'fuzz = 0.3\n(약간 흐림)', 'fuzz = 0.8\n(많이 흐림)']
+np.random.seed(0)
+
+for ax, fuzz, title in zip(axes, fuzz_values, titles):
+    ax.set_title(title, fontsize=11, fontweight='bold')
+    ax.axhline(0, color='#7f8c8d', lw=2.5)
+    ax.fill_between([-2, 2], -0.8, 0, color='#d5dbdb', alpha=0.5)
+
+    hit = np.array([0.0, 0.0])
+    ax.plot(*hit, 'o', color='#f39c12', markersize=11, zorder=6)
+
+    # 입사 광선
+    v = np.array([0.8, -1.0])
+    v = v / np.linalg.norm(v)
+    ax.annotate("", xy=hit, xytext=hit - 1.2 * v,
+                arrowprops=dict(arrowstyle="-|>", color='#e74c3c', lw=2))
+    ax.text(-1.1, 0.95, '입사 광선', fontsize=8.5, color='#e74c3c', ha='center')
+
+    # 법선 n
+    n = np.array([0.0, 1.0])
+    # 완전 반사 방향
+    dot_vn = np.dot(v, n)
+    reflected = v - 2 * dot_vn * n
+    reflected = reflected / np.linalg.norm(reflected)
+
+    if fuzz == 0.0:
+        # fuzz=0: 단일 반사 방향
+        ax.annotate("", xy=hit + 1.3 * reflected, xytext=hit,
+                    arrowprops=dict(arrowstyle="-|>", color='#27ae60', lw=2.5))
+        ax.text(reflected[0] * 1.4, reflected[1] * 1.4 + 0.15, '반사 광선',
+                fontsize=8.5, color='#27ae60', ha='center')
+    else:
+        # fuzz>0: 여러 방향
+        n_scatter = 12
+        for i in range(n_scatter):
+            rand = np.random.randn(2)
+            rand = rand / np.linalg.norm(rand)
+            perturbed = reflected + fuzz * rand
+            if perturbed[1] > 0:  # 표면 위쪽만
+                perturbed = perturbed / np.linalg.norm(perturbed)
+                alpha = 0.5 + 0.5 * (n_scatter - i) / n_scatter
+                ax.annotate("", xy=hit + 1.1 * perturbed, xytext=hit,
+                            arrowprops=dict(arrowstyle="-|>",
+                                          color='#27ae60', lw=1.5, alpha=alpha))
+
+        # 중심 반사 방향 (굵게)
+        ax.annotate("", xy=hit + 1.3 * reflected, xytext=hit,
+                    arrowprops=dict(arrowstyle="-|>", color='#1a8a4a', lw=3))
+        ax.text(reflected[0] + 0.15, reflected[1] * 1.3 + 0.1,
+                f'완전반사 방향\n± fuzz×random', fontsize=8, color='#1a8a4a', ha='center')
+
+        # fuzz 원 표시
+        theta_c = np.linspace(0, 2 * np.pi, 100)
+        c_center = hit + reflected
+        ax.plot(c_center[0] + fuzz * np.cos(theta_c),
+                c_center[1] + fuzz * np.sin(theta_c),
+                '--', color='#bdc3c7', lw=1.2, alpha=0.7)
+        ax.text(c_center[0], c_center[1] - fuzz - 0.2, f'반지름 = {fuzz}',
+                ha='center', fontsize=8, color='#7f8c8d')
+
+    ax.set_xlim(-2, 2)
+    ax.set_ylim(-0.9, 2.1)
+    ax.set_aspect('equal')
+    ax.axis('off')
+
+plt.tight_layout()
+plt.savefig("diagrams/fuzz.png", dpi=120, bbox_inches='tight')
+plt.close()
+print("fuzz.png 생성 완료")
+
+# ── 17. 굴절 — 스넬의 법칙 벡터 분해 ─────────────────────────────────────────
+fig, axes = plt.subplots(1, 2, figsize=(15, 8))
+fig.suptitle('굴절 (Refraction) — 스넬의 법칙과 벡터 분해', fontsize=14, fontweight='bold')
+
+# 왼쪽: 물리적 그림
+ax = axes[0]
+ax.set_title('① 스넬의 법칙: η₁·sinθ₁ = η₂·sinθ₂', fontsize=11)
+
+# 매질 구분
+ax.fill_between([-3, 3], 0, 3.5, color='#d6eaf8', alpha=0.4, label='공기 (η₁=1.0)')
+ax.fill_between([-3, 3], -3.5, 0, color='#a9cce3', alpha=0.5, label='유리 (η₂=1.5)')
+ax.axhline(0, color='#2980b9', lw=2.5)
+ax.text(-2.8, 2.8, '공기\nη₁ = 1.0', fontsize=10, color='#1a5276', fontweight='bold')
+ax.text(-2.8, -2.8, '유리\nη₂ = 1.5', fontsize=10, color='#1a5276', fontweight='bold')
+
+hit = np.array([0.0, 0.0])
+ax.plot(*hit, 'o', color='#f39c12', markersize=12, zorder=6)
+
+# 법선 (위쪽)
+n = np.array([0.0, 1.0])
+ax.plot([0, 0], [-2, 2], '--', color='#7f8c8d', lw=1.5, alpha=0.6)
+ax.text(0.1, 2.1, r'$\hat{n}$', fontsize=12, color='#7f8c8d', fontweight='bold')
+
+# 입사 광선 (θ₁ = 45°)
+theta1 = np.radians(45)
+v_in = np.array([np.sin(theta1), -np.cos(theta1)])
+ax.annotate("", xy=hit, xytext=hit - 2.2 * v_in,
+            arrowprops=dict(arrowstyle="-|>", color='#e74c3c', lw=2.5))
+ax.text(-2.0, 2.0, '입사 광선', fontsize=10, color='#e74c3c', fontweight='bold')
+
+# θ₁ 각도 호
+arc1 = np.linspace(np.radians(90), np.radians(135), 40)
+ax.plot(0.8 * np.cos(arc1), 0.8 * np.sin(arc1), color='#e74c3c', lw=2)
+ax.text(-0.6, 0.85, 'θ₁', fontsize=12, color='#e74c3c', fontweight='bold')
+
+# 굴절 광선 (스넬의 법칙으로 계산)
+eta_ratio = 1.0 / 1.5
+cos_t1 = np.cos(theta1)
+sin_t1 = np.sin(theta1)
+sin_t2 = eta_ratio * sin_t1
+cos_t2 = np.sqrt(1 - sin_t2**2)
+v_out = np.array([sin_t2, -cos_t2])
+ax.annotate("", xy=hit + 2.2 * v_out, xytext=hit,
+            arrowprops=dict(arrowstyle="-|>", color='#27ae60', lw=2.5))
+ax.text(1.0, -2.0, '굴절 광선', fontsize=10, color='#27ae60', fontweight='bold')
+
+# θ₂ 각도 호
+arc2 = np.linspace(np.radians(270), np.radians(270) + np.arcsin(sin_t2), 40)
+ax.plot(0.8 * np.cos(arc2), 0.8 * np.sin(arc2), color='#27ae60', lw=2)
+ax.text(0.4, -0.85, 'θ₂', fontsize=12, color='#27ae60', fontweight='bold')
+
+ax.text(0, -3.2,
+        'θ₂ < θ₁ (유리가 더 느려서 법선 쪽으로 꺾임)',
+        ha='center', fontsize=9.5, color='#1a5276', fontweight='bold')
+
+ax.legend(loc='lower right', fontsize=9)
+ax.set_xlim(-3, 3)
+ax.set_ylim(-3.5, 3.5)
+ax.set_aspect('equal')
+ax.axis('off')
+
+# 오른쪽: 벡터 분해
+ax = axes[1]
+ax.set_title(r"② 벡터 분해: $R'_\perp + R'_\parallel$", fontsize=11)
+
+ax.fill_between([-3, 3], 0, 3, color='#d6eaf8', alpha=0.3)
+ax.fill_between([-3, 3], -3, 0, color='#a9cce3', alpha=0.4)
+ax.axhline(0, color='#2980b9', lw=2)
+
+hit = np.array([0.0, 0.0])
+ax.plot(*hit, 'o', color='#f39c12', markersize=12, zorder=6)
+
+# 입사 광선 단위벡터
+v_in_u = np.array([np.sin(theta1), -np.cos(theta1)])
+ax.annotate("", xy=hit, xytext=hit - 1.8 * v_in_u,
+            arrowprops=dict(arrowstyle="-|>", color='#e74c3c', lw=2))
+ax.text(-1.5, 1.5, r'$\hat{R}$ (입사)', fontsize=10, color='#e74c3c', fontweight='bold')
+
+# R'⊥ (수직 성분, 표면 따라 수평)
+r_perp = eta_ratio * (v_in_u + cos_t1 * n)
+ax.annotate("", xy=hit + r_perp, xytext=hit,
+            arrowprops=dict(arrowstyle="-|>", color='#8e44ad', lw=2.5))
+ax.text(r_perp[0] + 0.1, r_perp[1] - 0.3, r"$R'_\perp$" + "\n(수평 성분\n× η₁/η₂)", fontsize=8.5,
+        color='#8e44ad', fontweight='bold')
+
+# R'∥ (평행 성분, 법선 방향)
+r_parallel = np.array([0, -cos_t2])
+ax.annotate("", xy=hit + r_parallel, xytext=hit,
+            arrowprops=dict(arrowstyle="-|>", color='#d35400', lw=2.5))
+ax.text(0.12, -cos_t2 / 2, r"$R'_\parallel$" + "\n(법선 성분\nby 피타고라스)", fontsize=8.5,
+        color='#d35400', fontweight='bold')
+
+# 최종 굴절 벡터
+v_refracted = r_perp + r_parallel
+ax.annotate("", xy=hit + 1.6 * v_refracted, xytext=hit,
+            arrowprops=dict(arrowstyle="-|>", color='#27ae60', lw=3))
+ax.text(1.0, -1.8, r"$R' = R'_\perp + R'_\parallel$" + "\n(최종 굴절 방향)", fontsize=9,
+        color='#27ae60', fontweight='bold')
+
+# 피타고라스 설명
+ax.text(-2.8, -2.5,
+        r"$|R'_\parallel|^2 = 1 - |R'_\perp|^2$" + "\n(단위벡터의 피타고라스 정리)",
+        fontsize=8.5, color='#d35400',
+        bbox=dict(boxstyle='round', facecolor='#fef5e7', edgecolor='#d35400'))
+
+ax.set_xlim(-3, 3)
+ax.set_ylim(-3, 3)
+ax.set_aspect('equal')
+ax.axis('off')
+
+plt.tight_layout()
+plt.savefig("diagrams/refraction.png", dpi=120, bbox_inches='tight')
+plt.close()
+print("refraction.png 생성 완료")
+
+# ── 18. 전반사 (Total Internal Reflection) ────────────────────────────────────
+fig, axes = plt.subplots(1, 3, figsize=(15, 7))
+fig.suptitle('전반사 (Total Internal Reflection) — 각도에 따른 3가지 경우', fontsize=14, fontweight='bold')
+
+eta1, eta2 = 1.5, 1.0  # 유리 → 공기
+critical_angle_rad = np.arcsin(eta2 / eta1)  # arcsin(1/1.5) ≈ 41.8°
+
+cases = [
+    {'theta_deg': 25, 'title': f'θ < 임계각({np.degrees(critical_angle_rad):.1f}°)\n굴절 가능', 'col': '#27ae60'},
+    {'theta_deg': np.degrees(critical_angle_rad), 'title': f'θ = 임계각({np.degrees(critical_angle_rad):.1f}°)\n굴절각 = 90°', 'col': '#f39c12'},
+    {'theta_deg': 60, 'title': f'θ > 임계각({np.degrees(critical_angle_rad):.1f}°)\n전반사', 'col': '#e74c3c'},
+]
+
+for ax, case in zip(axes, cases):
+    ax.set_title(case['title'], fontsize=10, fontweight='bold', color=case['col'])
+    ax.fill_between([-2.5, 2.5], 0, 3, color='#a9cce3', alpha=0.4)
+    ax.fill_between([-2.5, 2.5], -3, 0, color='#d6eaf8', alpha=0.3)
+    ax.axhline(0, color='#2980b9', lw=2)
+    ax.text(-2.3, 2.5, '유리\n(η=1.5)', fontsize=8.5, color='#1a5276', fontweight='bold')
+    ax.text(-2.3, -2.5, '공기\n(η=1.0)', fontsize=8.5, color='#1a5276', fontweight='bold')
+
+    hit = np.array([0.0, 0.0])
+    ax.plot(*hit, 'o', color='#f39c12', markersize=10, zorder=6)
+    ax.plot([0, 0], [-2.5, 2.5], '--', color='#7f8c8d', lw=1, alpha=0.5)
+
+    theta1_r = np.radians(case['theta_deg'])
+    v_in = np.array([np.sin(theta1_r), -np.cos(theta1_r)])
+
+    # 입사 광선 (아래에서 위로, 유리 안에서 나가려 함)
+    ax.annotate("", xy=hit, xytext=hit - 1.8 * v_in,
+                arrowprops=dict(arrowstyle="-|>", color='#7f8c8d', lw=2))
+
+    sin_t2 = (eta1 / eta2) * np.sin(theta1_r)
+
+    if sin_t2 <= 1.0:
+        # 굴절 가능
+        cos_t2 = np.sqrt(max(0, 1 - sin_t2**2))
+        v_out = np.array([np.sign(v_in[0]) * sin_t2, -cos_t2])
+        ax.annotate("", xy=hit + 1.8 * v_out, xytext=hit,
+                    arrowprops=dict(arrowstyle="-|>", color=case['col'], lw=2.5))
+
+        if case['theta_deg'] == np.degrees(critical_angle_rad):
+            ax.text(1.0, -0.3, 'θ₂ = 90°\n(표면과 나란)', fontsize=8,
+                    color=case['col'], fontweight='bold')
+    else:
+        # 전반사: 반사만
+        n = np.array([0.0, 1.0])
+        dot_vn = np.dot(v_in, n)
+        v_ref = v_in - 2 * dot_vn * n
+        ax.annotate("", xy=hit + 1.8 * v_ref, xytext=hit,
+                    arrowprops=dict(arrowstyle="-|>", color=case['col'], lw=2.5))
+        ax.text(1.1, 1.5, '반사만\n(굴절 없음)', fontsize=8.5,
+                color=case['col'], fontweight='bold')
+        ax.text(0, -1.8,
+                f'sin_t2 = {sin_t2:.2f} > 1.0\n→ 굴절 불가!',
+                ha='center', fontsize=8.5, color='#c0392b',
+                bbox=dict(boxstyle='round', facecolor='#fadbd8', edgecolor='#c0392b'))
+
+    # 각도 호
+    arc = np.linspace(np.radians(90), np.radians(90 + case['theta_deg']), 30)
+    ax.plot(0.6 * np.cos(arc), 0.6 * np.sin(arc), color='#7f8c8d', lw=1.5)
+    ax.text(-0.5, 0.65, 'θ₁', fontsize=10, color='#7f8c8d')
+
+    ax.set_xlim(-2.5, 2.5)
+    ax.set_ylim(-3, 3)
+    ax.set_aspect('equal')
+    ax.axis('off')
+
+plt.tight_layout()
+plt.savefig("diagrams/total_internal_reflection.png", dpi=120, bbox_inches='tight')
+plt.close()
+print("total_internal_reflection.png 생성 완료")
+
+# ── 19. 속 빈 유리 구 (Hollow Sphere Trick) ───────────────────────────────────
+fig, axes = plt.subplots(1, 2, figsize=(14, 8))
+fig.suptitle('속 빈 유리 구 (Hollow Sphere) — 음수 반지름 트릭', fontsize=14, fontweight='bold')
+
+# 왼쪽: 일반 유리 구 (단단한 구)
+ax = axes[0]
+ax.set_title('① 일반 유리 구 (r = 0.5)\n빛이 안을 가득 채운 유리를 통과', fontsize=10)
+
+center = np.array([0.0, 0.0])
+for r, fc, ec, label in [(1.5, '#d6eaf8', '#2980b9', '유리 (r=0.5)')]:
+    circ = plt.Circle(center, r, facecolor=fc, edgecolor=ec, lw=2, alpha=0.6)
+    ax.add_patch(circ)
+    ax.text(0, -r - 0.3, label, ha='center', fontsize=9, color=ec, fontweight='bold')
+
+# 빛의 경로 (공기→유리→유리→공기, 두 번 굴절)
+in_start = np.array([-2.8, 1.0])
+in_hit = np.array([-1.3, 0.3])
+through = np.array([1.3, -0.4])
+out_end = np.array([2.8, -1.2])
+
+path_points = [in_start, in_hit, through, out_end]
+path_colors = ['#e74c3c', '#8e44ad', '#27ae60']
+path_labels = ['입사 (공기)', '내부 (유리)', '굴절 후 (공기)']
+
+for i in range(len(path_points) - 1):
+    ax.annotate("", xy=path_points[i+1], xytext=path_points[i],
+                arrowprops=dict(arrowstyle="-|>", color=path_colors[i], lw=2.2))
+
+for pt, col in [(in_hit, '#8e44ad'), (through, '#27ae60')]:
+    ax.plot(*pt, 'o', color=col, markersize=9, zorder=6)
+
+ax.text(-2.5, 1.3, '① 공기→유리\n굴절', fontsize=8, color='#e74c3c', ha='center')
+ax.text(0, 0.5, '② 유리 안 통과', fontsize=8, color='#8e44ad', ha='center')
+ax.text(2.5, -0.7, '③ 유리→공기\n굴절', fontsize=8, color='#27ae60', ha='center')
+
+ax.set_xlim(-3.5, 3.5)
+ax.set_ylim(-2.5, 2.5)
+ax.set_aspect('equal')
+ax.axis('off')
+
+# 오른쪽: 속 빈 유리 구 (바깥 유리 + 안쪽 음수 반지름)
+ax = axes[1]
+ax.set_title('② 속 빈 유리 구\n바깥(r=0.5) + 안쪽(r=-0.4, 법선이 안쪽)', fontsize=10)
+
+# 바깥 유리 구
+outer = plt.Circle(center, 1.5, facecolor='#d6eaf8', edgecolor='#2980b9', lw=2.5,
+                   alpha=0.4, label='바깥 구 r=+0.5')
+# 안쪽 공기 구멍
+inner = plt.Circle(center, 1.2, facecolor='white', edgecolor='#e74c3c', lw=2.5,
+                   linestyle='--', alpha=0.9, label='안쪽 구 r=-0.4')
+ax.add_patch(outer)
+ax.add_patch(inner)
+
+ax.text(0, -1.7, '바깥 유리 구 (r=+0.5)\n법선: 바깥 방향 →', ha='center',
+        fontsize=8.5, color='#2980b9', fontweight='bold')
+ax.text(0, 0.2, '안쪽 공기\n(r=-0.4)\n법선: 안쪽 방향 ←\n(뒤집힘!)', ha='center',
+        fontsize=8.5, color='#e74c3c', fontweight='bold',
+        bbox=dict(boxstyle='round', facecolor='#fef9e7', edgecolor='#f39c12'))
+
+# 법선 화살표들 (바깥 구: 바깥 방향)
+for angle_deg in [0, 60, 120, 180, 240, 300]:
+    angle_r = np.radians(angle_deg)
+    p = 1.5 * np.array([np.cos(angle_r), np.sin(angle_r)])
+    n_dir = p / np.linalg.norm(p)
+    ax.annotate("", xy=p + 0.4 * n_dir, xytext=p,
+                arrowprops=dict(arrowstyle="-|>", color='#2980b9', lw=1.5))
+
+# 법선 화살표들 (안쪽 구: 안쪽 방향)
+for angle_deg in [30, 90, 150, 210, 270, 330]:
+    angle_r = np.radians(angle_deg)
+    p = 1.2 * np.array([np.cos(angle_r), np.sin(angle_r)])
+    n_dir = -p / np.linalg.norm(p)  # 안쪽으로
+    ax.annotate("", xy=p + 0.35 * n_dir, xytext=p,
+                arrowprops=dict(arrowstyle="-|>", color='#e74c3c', lw=1.5))
+
+# 코드 설명
+ax.text(-3.3, -2.2,
+        'make_shared<sphere>(pos,  0.5, mat_glass)   // 바깥\n'
+        'make_shared<sphere>(pos, -0.4, mat_bubble)  // 안쪽 (음수!)',
+        fontsize=8, color='#2c3e50',
+        bbox=dict(boxstyle='round', facecolor='#f8f9fa', edgecolor='#adb5bd'))
+
+ax.set_xlim(-3.5, 3.5)
+ax.set_ylim(-2.8, 2.5)
+ax.set_aspect('equal')
+ax.axis('off')
+
+plt.tight_layout()
+plt.savefig("diagrams/hollow_sphere.png", dpi=120, bbox_inches='tight')
+plt.close()
+print("hollow_sphere.png 생성 완료")
+
 print("\n모든 다이어그램 생성 완료 → diagrams/ 폴더")

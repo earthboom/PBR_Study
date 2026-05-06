@@ -12,7 +12,8 @@ int main()
     // ── 재질 정의 ────────────────────────────────────────────────
     auto mat_ground   = make_shared<lambertian>(color(0.8, 0.8, 0.0)); // 노란 땅
     auto mat_center   = make_shared<lambertian>(color(0.1, 0.2, 0.5)); // 파란 확산 구
-    auto mat_left     = make_shared<metal>(color(0.8, 0.8, 0.8), 0.3); // 흐린 은색 금속
+    auto mat_left     = make_shared<dielectric>(1.50);                  // 유리 (굴절률 1.5)
+    auto mat_bubble   = make_shared<dielectric>(1.00 / 1.50);           // 유리 안 공기 방울 (역수)
     auto mat_right    = make_shared<metal>(color(0.8, 0.6, 0.2), 0.0); // 완벽한 금색 금속
 
     // ── 씬 구성 ─────────────────────────────────────────────────
@@ -20,6 +21,8 @@ int main()
     world.add(make_shared<sphere>(point3( 0.0, -100.5, -1.0), 100.0, mat_ground));
     world.add(make_shared<sphere>(point3( 0.0,    0.0, -1.2),   0.5, mat_center));
     world.add(make_shared<sphere>(point3(-1.0,    0.0, -1.0),   0.5, mat_left));
+    // 반지름 음수 구 = 법선이 안쪽을 향함 → 유리 구 내부를 공기로 채우는 효과 (속 빈 유리)
+    world.add(make_shared<sphere>(point3(-1.0,    0.0, -1.0),  -0.4, mat_bubble));
     world.add(make_shared<sphere>(point3( 1.0,    0.0, -1.0),   0.5, mat_right));
 
     // ── 카메라 설정 ──────────────────────────────────────────────
@@ -32,7 +35,7 @@ int main()
     // ── 렌더링 ───────────────────────────────────────────────────
     const std::filesystem::path out_dir = std::filesystem::path(PROJECT_SOURCE_DIR) / "output";
     std::filesystem::create_directories(out_dir);
-    std::ofstream out(out_dir / "ch8_metal.ppm");
+    std::ofstream out(out_dir / "ch9_dielectric.ppm");
     if (!out) { std::cerr << "Failed to open output file\n"; return 1; }
 
     cam.render(world, out);

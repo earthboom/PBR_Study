@@ -16,6 +16,7 @@ add_executable(raytracer
     src/hittable_list.h
     src/sphere.h
     src/camera.h
+    src/material.h
 )
 
 target_compile_options(raytracer PRIVATE /utf-8)

@@ -997,6 +997,8 @@ Diffuse 재질은 방향이 **무작위**다. 다만 아무 방향이나 아니�
 
 이 방식은 자연스럽게 **법선과 가까운 방향을 더 자주 선택**한다 (람베르트 분포, 아래 설명).
 
+![람베르트 확산](diagrams/lambertian_diffuse.png)
+
 #### ③ 단위구 안의 무작위 점 — 기각 샘플링
 
 단위구 표면 위에서 직접 무작위 점을 고르는 공식은 복잡하다.
@@ -1103,6 +1105,8 @@ inline vec3 random_on_hemisphere(const vec3& normal) {
                   ← 하늘 색 × 0.5 반환
 ← 하늘 색 × 0.5 × 0.5 반환
 ```
+
+![재귀 광선 추적](diagrams/recursive_ray.png)
 
 #### ② 감쇠 — 0.5를 곱하는 이유
 
@@ -1366,6 +1370,8 @@ Diffuse는 광선이 어디서 왔든 무관하게 무작위 방향으로 튄다
 
 법선을 기준으로 좌우가 완전히 대칭. 입사각 = 반사각.
 
+![정반사](diagrams/reflection.png)
+
 #### ③ 일상 비유
 
 당구공이 쿠션에 부딪힐 때, 쿠션(표면)과 **나란한 성분은 그대로**, 쿠션에 **수직인 성분(법선 방향)만 뒤집힌다.**
@@ -1441,6 +1447,8 @@ fuzz = 0.3:  reflected + 0.3 * random_unit_vector()
 - `fuzz = 1` → 매우 흐린 금속
 - `fuzz > 1` → 의미 없음, 코드에서 1로 클램프
 
+![Fuzz 금속 흐림](diagrams/fuzz.png)
+
 반사된 방향을 정규화한 뒤 fuzz를 더하는 이유:
 벡터 크기가 크면 fuzz의 영향이 줄어들고, 크기가 작으면 fuzz의 영향이 커진다.
 정규화(길이 = 1)해야 fuzz가 항상 일관된 크기로 작용한다.
@@ -1478,3 +1486,217 @@ return dot(scattered.direction(), rec.normal) > 0;
 - [src/hittable.h](pbr-raytracer/src/hittable.h) (`hit_record`에 `shared_ptr<material> mat` 추가)
 - [src/sphere.h](pbr-raytracer/src/sphere.h) (생성자에 `material` 인자 추가, `rec.mat` 저장)
 - [src/camera.h](pbr-raytracer/src/camera.h) (`ray_color`에서 `mat->scatter()` 호출로 교체)
+
+---
+
+## Ch.9 — 유전체 재질 (Dielectrics)
+
+### 왜 이걸 하는가?
+
+Ch.8까지는 두 가지 재질만 있었다 — 빛을 무작위로 흩뿌리는 확산(Diffuse)과 빛을 거울처럼 반사하는 금속(Metal).
+하지만 현실의 재질은 훨씬 다양하다. **유리, 물, 다이아몬드**는 빛을 반사하기도 하고 통과시키기도 한다.
+이 챕터의 목표: 빛이 매질 경계를 지날 때 **꺾이는 현상(굴절)** 을 수학적으로 구현한다.
+
+---
+
+### 개념 1: 굴절 — 스넬의 법칙 (Snell's Law)
+
+#### ① 왜 이게 필요한가?
+
+Metal의 `scatter()`는 "입사 방향을 법선에 대해 뒤집기"만 했다.
+유리는 이것으로 부족하다 — 빛이 유리 표면을 **통과**하면서 방향이 바뀐다.
+굴절 공식 없이는 유리 구가 그냥 흰 공으로 렌더링된다.
+
+#### ② 머릿속 그림
+
+```
+    공기 (η = 1.0)
+       ↘ 입사 광선 (θ₁)
+────────────────────────  유리 표면
+          ↘ 굴절 광선 (θ₂)  ← 법선 쪽으로 꺾임
+    유리 (η = 1.5)
+```
+
+빛이 **느린 매질(유리)** 로 들어가면 법선 방향으로 꺾이고,
+**빠른 매질(공기)** 로 나오면 법선에서 멀어지는 방향으로 꺾인다.
+
+![굴절](diagrams/refraction.png)
+
+#### ③ 일상 비유
+
+수영장에서 물속을 보면 바닥이 실제보다 얕게 보이는 것. 빛이 물과 공기 경계에서 꺾이기 때문이다.
+
+#### ④ 수식 전개
+
+**스넬의 법칙 (기본형)**:
+
+$$\eta_1 \sin\theta_1 = \eta_2 \sin\theta_2$$
+
+η = 굴절률 (공기=1.0, 유리=1.5, 물=1.33, 다이아몬드=2.4)
+
+이걸 코드에 바로 쓸 수 없으므로 **벡터 형태로 전개**한다.
+굴절 벡터 $\mathbf{R'}$를 법선에 수직인 성분과 평행인 성분으로 분해한다:
+
+$$\mathbf{R'}_\perp = \frac{\eta_1}{\eta_2}(\mathbf{R} + \cos\theta_1 \cdot \hat{n})$$
+
+$$\mathbf{R'}_\parallel = -\sqrt{1 - |\mathbf{R'}_\perp|^2} \cdot \hat{n}$$
+
+$$\mathbf{R'} = \mathbf{R'}_\perp + \mathbf{R'}_\parallel$$
+
+단, $\cos\theta_1 = \mathbf{-\hat{R}} \cdot \hat{n}$ (입사 광선을 뒤집어서 법선과의 각도를 구함)
+
+#### ⑤ 수식의 의미
+
+$\mathbf{R'}_\perp$는 굴절 벡터의 **"표면과 나란한 성분"** 을 스넬 법칙 비율로 늘리거나 줄인다.
+$\mathbf{R'}_\parallel$는 피타고라스 정리로 **"법선 방향 성분"** 을 역으로 계산한다.
+둘을 더하면 정확한 굴절 방향 벡터가 나온다.
+
+#### ⑥ 구체적 숫자 예시
+
+수직 입사: $\mathbf{\hat{R}} = (0,-1,0)$, $\hat{n} = (0,1,0)$, $\eta_1/\eta_2 = 1.0/1.5$
+
+$$\cos\theta_1 = (0,1,0) \cdot (0,1,0) = 1.0$$
+
+$$\mathbf{R'}_\perp = \frac{1}{1.5} \cdot ((0,-1,0) + 1.0 \cdot (0,1,0)) = \frac{1}{1.5} \cdot (0,0,0) = (0,0,0)$$
+
+$$\mathbf{R'}_\parallel = -\sqrt{1-0} \cdot (0,1,0) = (0,-1,0)$$
+
+수직 입사라 꺾임 없이 그대로 통과 ✓
+
+#### ⑦ 코드 연결
+
+| 수식 기호 | 코드 | 위치 |
+|---------|------|------|
+| $\mathbf{\hat{R}}$ | `uv` | `refract()` 인자 |
+| $\hat{n}$ | `n` | `refract()` 인자 |
+| $\eta_1/\eta_2$ | `etai_over_etat` | `refract()` 인자 |
+| $\cos\theta_1$ | `fmin(dot(-uv, n), 1.0)` | `refract()` 내부 |
+| $\mathbf{R'}_\perp$ | `r_out_perp` | `refract()` 내부 |
+| $\mathbf{R'}_\parallel$ | `r_out_parallel` | `refract()` 내부 |
+
+```cpp
+// vec3.h
+inline vec3 refract(const vec3& uv, const vec3& n, double etai_over_etat)
+{
+    double cos_theta = fmin(dot(-uv, n), 1.0);
+    vec3 r_out_perp     = etai_over_etat * (uv + cos_theta * n);
+    vec3 r_out_parallel = -std::sqrt(std::fabs(1.0 - r_out_perp.length_squared())) * n;
+    return r_out_perp + r_out_parallel;
+}
+```
+
+---
+
+### 개념 2: 전반사 (Total Internal Reflection)
+
+#### ① 왜 이게 필요한가?
+
+유리→공기 방향으로, 입사각이 충분히 크면 굴절이 물리적으로 불가능해진다.
+이 경우를 처리하지 않으면 `sqrt()` 안에 음수가 들어가 NaN이 발생한다.
+
+#### ② 머릿속 그림
+
+```
+    유리 (η = 1.5)
+       ↗ 전반사 (굴절 없음)
+──────P──────────────────  유리/공기 경계
+    (각도가 임계각보다 크면 빛이 밖으로 못 나감)
+    공기 (η = 1.0)
+```
+
+수중에서 수면을 비스듬히 올려다보면 수면이 거울처럼 보이는 현상이 바로 전반사다.
+
+#### ③ 조건
+
+스넬 법칙에서 $\sin\theta_2 = \frac{\eta_1}{\eta_2}\sin\theta_1$ 이 1을 초과하면 굴절 불가:
+
+$$\frac{\eta_1}{\eta_2} \cdot \sin\theta_1 > 1.0 \implies \text{전반사}$$
+
+코드에서 `sin_theta`는 피타고라스로 구한다: $\sin\theta = \sqrt{1 - \cos^2\theta}$
+
+```cpp
+bool cannot_refract = ri * sin_theta > 1.0;
+if (cannot_refract || ...)
+    direction = reflect(unit_dir, rec.normal);  // 반사만 일어남
+```
+
+![전반사](diagrams/total_internal_reflection.png)
+
+---
+
+### 개념 3: 슐릭 근사 (Schlick Approximation)
+
+#### ① 왜 이게 필요한가?
+
+실제 유리는 각도에 따라 반사율이 달라진다.
+정면에서 보면 투명하지만, 비스듬히 보면 반사가 강해진다 (자동차 유리, 물 표면이 그렇다).
+이를 정확히 계산하는 프레넬(Fresnel) 방정식은 복잡하므로, Christophe Schlick이 제안한 **5차 다항식 근사**를 쓴다.
+
+#### ② 수식
+
+$$R_0 = \left(\frac{\eta_1 - \eta_2}{\eta_1 + \eta_2}\right)^2$$
+
+$$R(\theta) = R_0 + (1 - R_0)(1 - \cos\theta)^5$$
+
+$R_0$은 수직 입사(θ=0)일 때의 반사율이다. 각도가 커질수록 $R(\theta)$가 1에 가까워진다.
+
+#### ③ 코드 적용
+
+$R(\theta)$와 `random_double()` 을 비교해 확률적으로 반사/굴절을 결정한다:
+
+```cpp
+if (cannot_refract || reflectance(cos_theta, ri) > random_double())
+    direction = reflect(...);   // 반사
+else
+    direction = refract(...);   // 굴절
+```
+
+이렇게 하면 샘플이 쌓일수록 물리적으로 올바른 평균 반사율이 된다.
+
+---
+
+### 개념 4: 속 빈 유리 구 (Hollow Sphere)
+
+**트릭**: 반지름이 음수인 구를 유리 구 안에 추가한다.
+
+반지름이 음수이면 기하학적으로 같은 구지만 **법선이 안쪽을 향한다**.
+결과적으로 `front_face`가 바뀌어 굴절률이 역전된다 → 빛이 유리→공기(안쪽)로 굴절.
+
+```
+           r = 0.5 (유리 바깥)
+        ┌───────────────┐
+        │   r = -0.4    │
+        │  ┌─────────┐  │
+        │  │  공기   │  │
+        │  └─────────┘  │
+        └───────────────┘
+```
+
+```cpp
+auto mat_left   = make_shared<dielectric>(1.50);
+auto mat_bubble = make_shared<dielectric>(1.00 / 1.50);  // 역수 = 공기→유리 역방향
+
+world.add(make_shared<sphere>(point3(-1,0,-1),  0.5, mat_left));    // 바깥 유리
+world.add(make_shared<sphere>(point3(-1,0,-1), -0.4, mat_bubble));  // 안쪽 공기 방울
+```
+
+![속 빈 유리 구](diagrams/hollow_sphere.png)
+
+---
+
+### 결과물
+
+![Ch.9 Dielectrics](pbr-raytracer/results/ch9_dielectric.png)
+
+| 구 | 재질 | 특징 |
+|----|------|------|
+| 가운데 (파랑) | `lambertian(0.1, 0.2, 0.5)` | 확산 반사 |
+| 왼쪽 | `dielectric(1.50)` + 내부 공기 방울 | 속 빈 유리 — 씬이 뒤집혀 보임 |
+| 오른쪽 (금색) | `metal(0.8, 0.6, 0.2), fuzz=0` | 완벽한 거울 반사 |
+
+왼쪽 유리 구를 통해 씬이 굴절되어 뒤집혀 보이고, 비스듬히 보이는 가장자리는 슐릭 근사로 반사가 강해진다.
+
+### 관련 파일
+- [src/vec3.h](pbr-raytracer/src/vec3.h) (`refract()` 추가)
+- [src/material.h](pbr-raytracer/src/material.h) (`dielectric` 클래스 추가)
+- [src/main.cpp](pbr-raytracer/src/main.cpp) (씬에 유리 구 + 속 빈 구 추가)
