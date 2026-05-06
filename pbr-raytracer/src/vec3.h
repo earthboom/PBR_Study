@@ -48,6 +48,13 @@ public:
         return e[0] * e[0] + e[1] * e[1] + e[2] * e[2];
     }
 
+    // 각 성분이 거의 0인치 확인 - 산란 방향이 영벡터가 되는 것을 방지
+    bool near_zero() const
+    {
+        const double s = 1e-8;
+        return (std::fabs(e[0]) < s) && (std::fabs(e[1]) < s) && (std::fabs(e[2]) < s);
+    }
+
     // 각 성분이 [0, 1) 범위인 무작위 벡터
     static vec3 random()
     {
@@ -153,4 +160,10 @@ inline vec3 random_on_hemisphere(const vec3 &normal)
         return on_unit_sphere;
     else
         return -on_unit_sphere;
+}
+
+// 입시 벡터 v를 법선 n에 대해 반사 : v - 2(v * n) * n
+inline vec3 reflect(const vec3 &v, const vec3 &n)
+{
+    return v - 2 * dot(v, n) * n;
 }

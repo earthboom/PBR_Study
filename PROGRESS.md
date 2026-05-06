@@ -1,6 +1,6 @@
 # 학습 진행 상황
 
-## 현재 Phase: Phase 1 진행 중 — 다음 작업: Ch.8 Metal
+## 현재 Phase: Phase 1 진행 중 — 다음 작업: Ch.9 Dielectrics
 
 ---
 
@@ -25,8 +25,8 @@
 - [x] Ch.5 Surface Normals — hittable 추상화, 앞/뒷면 법선, hittable_list, interval
 - [x] Ch.6 Antialiasing — camera 클래스, 픽셀당 N샘플 평균, random_double, 색상 클램핑
 - [x] Ch.7 Diffuse Materials — 람베르트 확산, 재귀 광선 추적, 감마 보정
-- [ ] **Ch.8 Metal ← 현재 위치**
-- [ ] Ch.9 Dielectrics
+- [x] Ch.8 Metal — 정반사, material 추상화, lambertian/metal 클래스, fuzz
+- [ ] **Ch.9 Dielectrics ← 현재 위치**
 - [ ] Ch.10 Positionable Camera
 - [ ] Ch.11 Defocus Blur
 

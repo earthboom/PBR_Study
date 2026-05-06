@@ -2,6 +2,11 @@
 #include "vec3.h"
 #include "ray.h"
 #include "interval.h"
+#include <memory>
+
+class material;
+
+using std::shared_ptr;
 
 // 광선이 어떤 표면에 부딪혔을 때, 그 충돌에 대한 정보를 한 묶음으로 담는다.
 // - p : 충돌 지점의 3D 좌표
@@ -14,6 +19,7 @@ struct hit_record
 	vec3 normal;
 	double t;
 	bool front_face;
+	shared_ptr<material> mat;
 
 	// 외향 법선 (밖을 향하는 단위벡터)를 받아, 광선과의 부호로 앞/뒷면 판별
 	// - 광선과 외향 법선이 반대 방향 (내적 < 0) -> 광선이 밖에서 들어옴 -> 앞면

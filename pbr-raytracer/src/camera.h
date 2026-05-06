@@ -1,6 +1,7 @@
 #pragma once
 #include "rtweekend.h"
 #include "hittable.h"
+#include "material.h"
 
 // 카메라 + 렌더 루프를 한 클래스로 묶음
 // main.cpp 는 Scene을 만들고 camera.render(world) 한 줄만 호출하면 됨
@@ -100,10 +101,15 @@ private:
         // t_min = 0.001 : 부동소수점 오차로 자기 자신을 다시 때리는 현상(shadow acne) 방지
         if (world.hit(r, interval(0.001, infinity), rec))
         {
-            // 법선 기준 반구 위 무작위 방향 -> Diffuse 반사
-            vec3 direction = random_on_hemisphere(rec.normal);
-            // 반사된 광선을 재귀 추적, 0.5 = 표면이 빛의 50% 흡수
-            return 0.5 * ray_color(ray(rec.p, direction), depth - 1, world);
+            ray scattered;
+            color attenuation;
+
+            // 재질에게 "이 광선이 어디로 튀는가?"를 묻는다.
+            if (rec.mat->scatter(r, rec, attenuation, scattered))
+                return attenuation * ray_color(scattered, depth - 1, world);
+
+            // scatter가 false면 빛이 흡수됨 -> 검정
+            return color(0, 0, 0);
         }
 
         vec3 unit_dir = unit_vector(r.direction());

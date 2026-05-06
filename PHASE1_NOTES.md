@@ -1281,3 +1281,200 @@ Ch.6(법선 색)과 비교:
 - [src/vec3.h](pbr-raytracer/src/vec3.h) (`random()`, `random_in_unit_sphere()`, `random_unit_vector()`, `random_on_hemisphere()` 추가)
 - [src/camera.h](pbr-raytracer/src/camera.h) (`max_depth` 추가, `ray_color` 재귀화)
 - [src/color.h](pbr-raytracer/src/color.h) (`linear_to_gamma()` 추가, `write_color` 갱신)
+
+---
+
+## Ch.8 — 금속 재질 (Metal)
+
+### 왜 이걸 하는가?
+
+Ch.7까지는 모든 표면이 빛을 무작위 방향으로 흩뿌리는 확산 재질(Diffuse)뿐이었다.
+현실의 재질은 훨씬 다양하다 — 금속은 빛을 **정해진 방향으로 반사**하고, 유리는 빛을 통과시킨다.
+
+이번 챕터의 목표:
+1. **`material` 추상화** — 재질 종류를 코드 구조로 정리 (OOP 설계)
+2. **`lambertian`** — Ch.7의 확산 반사를 재질 클래스로 분리
+3. **`metal`** — 정반사(reflection) + `fuzz`(흐림) 구현
+
+결과: 씬 안에서 확산 구와 금속 구가 **각자 다르게 빛을 반사**한다.
+
+---
+
+### 개념 1: `material` 추상화 — 왜 클래스 계층이 필요한가?
+
+Ch.7의 `ray_color()`는 광선이 물체에 맞으면 항상 "람베르트 확산"을 했다.
+하드코딩이라 다른 재질을 추가하려면 `if/else` 분기가 끝없이 늘어난다.
+
+**설계 결정:**
+`material` 추상 클래스 하나를 만들고, 모든 재질이 `scatter()` 하나만 구현하도록 한다.
+
+```
+        ┌──────────────────────┐
+        │    material          │  ← 인터페이스 (추상 클래스)
+        │    + scatter(...)    │    "이 광선이 어디로 튀는가?"
+        └──────────┬───────────┘
+                   │ (상속)
+          ┌────────┼────────┐
+          ▼        ▼        ▼
+     lambertian   metal   dielectric  (재질별 구현)
+```
+
+`scatter()`의 계약:
+- 입력: 입사 광선 `r_in`, 충돌 정보 `rec`
+- 출력: 산란 광선 `scattered`, 감쇠 색 `attenuation`
+- 반환값: `true` = 빛이 반사됨, `false` = 빛이 완전 흡수됨
+
+`camera.h`의 `ray_color()`는 이제 재질 종류를 전혀 몰라도 된다:
+
+```cpp
+if (rec.mat->scatter(r, rec, attenuation, scattered))
+    return attenuation * ray_color(scattered, depth - 1, world);
+return color(0, 0, 0);  // 흡수됨
+```
+
+**`hittable.h`와 `material.h`의 순환 참조 문제:**
+`hit_record`는 `shared_ptr<material>`을 들고 있고,
+`material`의 `scatter()`는 `hit_record`를 매개변수로 받는다.
+A가 B를 include하고 B가 A를 include하면 무한 순환이다.
+
+해결책: **전방 선언(forward declaration)**
+```cpp
+// hittable.h 맨 위
+class material;  // "material이라는 클래스가 존재함"만 선언. 내용은 몰라도 포인터는 만들 수 있다.
+```
+
+---
+
+### 개념 2: 정반사(Reflection) — 금속 재질의 핵심 수학
+
+#### ① 왜 이게 필요한가?
+
+Diffuse는 광선이 어디서 왔든 무관하게 무작위 방향으로 튄다.
+금속은 다르다 — **입사 방향을 법선에 대해 대칭으로 뒤집은 딱 한 방향**으로만 반사된다.
+이 수식 없이는 금속 표면에서 광선이 어디로 가야 할지 계산할 수 없다.
+
+#### ② 머릿속 그림
+
+```
+      입사 광선 v          반사 광선 v_ref
+             ↘            ↗
+              \          /
+───────────────P──────────────── 표면
+               ↑
+               n (법선)
+```
+
+법선을 기준으로 좌우가 완전히 대칭. 입사각 = 반사각.
+
+#### ③ 일상 비유
+
+당구공이 쿠션에 부딪힐 때, 쿠션(표면)과 **나란한 성분은 그대로**, 쿠션에 **수직인 성분(법선 방향)만 뒤집힌다.**
+
+#### ④ 수식 전개 — 빈 단계 없이
+
+벡터 $\mathbf{v}$ (입사 방향), $\hat{n}$ (표면 법선, 단위벡터).
+
+**1단계 — v를 두 성분으로 분해:**
+
+$$\mathbf{v} = \underbrace{(\mathbf{v} \cdot \hat{n})\hat{n}}_{\text{법선 방향 성분}} + \underbrace{\mathbf{v} - (\mathbf{v} \cdot \hat{n})\hat{n}}_{\text{법선 수직 성분}}$$
+
+**2단계 — 반사 = 법선 수직 성분은 유지, 법선 방향 성분만 부호 반전:**
+
+$$\mathbf{v}_{ref} = \underbrace{\mathbf{v} - (\mathbf{v} \cdot \hat{n})\hat{n}}_{\text{수직 성분 그대로}} + \underbrace{(-(\mathbf{v} \cdot \hat{n})\hat{n})}_{\text{법선 성분 뒤집기}}$$
+
+**3단계 — 정리:**
+
+$$\boxed{\mathbf{v}_{ref} = \mathbf{v} - 2(\mathbf{v} \cdot \hat{n})\hat{n}}$$
+
+#### ⑤ 수식의 의미
+
+$\mathbf{v} - 2(\mathbf{v} \cdot \hat{n})\hat{n}$ 는 "입사 방향에서 법선 방향 성분을 두 배 뺀다"는 뜻이다.
+법선 방향만 부호가 바뀌고 나머지는 그대로이므로 **입사각 = 반사각**이 자동으로 성립한다.
+
+#### ⑥ 구체적 숫자 예시
+
+$\mathbf{v} = (1, -1, 0)$ (45도 아래 오른쪽), $\hat{n} = (0, 1, 0)$ (위를 향하는 법선)
+
+$$\mathbf{v} \cdot \hat{n} = (1)(0) + (-1)(1) + (0)(0) = -1$$
+
+$$\mathbf{v}_{ref} = (1, -1, 0) - 2 \times (-1) \times (0, 1, 0) = (1, -1, 0) + (0, 2, 0) = (1, 1, 0)$$
+
+$(1, -1, 0)$이 $(1, 1, 0)$으로 — y 성분만 뒤집혔다 ✓ 완벽한 대칭 반사.
+
+#### ⑦ 코드와 연결
+
+| 수식 기호 | 코드 | 의미 |
+|---------|------|------|
+| $\mathbf{v}$ | `v` | 입사 광선 방향 |
+| $\hat{n}$ | `n` | 표면 법선 (단위벡터) |
+| $\mathbf{v} \cdot \hat{n}$ | `dot(v, n)` | 내적 |
+| $2(\mathbf{v} \cdot \hat{n})\hat{n}$ | `2*dot(v,n)*n` | 법선 방향 성분 × 2 |
+| $\mathbf{v}_{ref}$ | `v - 2*dot(v,n)*n` | 반사 벡터 |
+
+```cpp
+// vec3.h
+inline vec3 reflect(const vec3& v, const vec3& n)
+{
+    return v - 2*dot(v,n)*n;
+}
+```
+
+---
+
+### 개념 3: Fuzz — 흐린 금속 반사
+
+완벽한 거울만 있으면 재미없다. 실제 금속은 표면이 약간 거칠어서 반사가 흐릿하다.
+
+**아이디어:** 반사된 방향에 **작은 무작위 벡터를 더한다.**
+
+```
+완벽한 반사: reflected
+                 ↗
+────────────────── 표면
+
+fuzz = 0.3:  reflected + 0.3 * random_unit_vector()
+            /↗   ↗  ↗  (여러 방향 중 하나)
+────────────────── 표면
+```
+
+- `fuzz = 0` → 완벽한 거울
+- `fuzz = 1` → 매우 흐린 금속
+- `fuzz > 1` → 의미 없음, 코드에서 1로 클램프
+
+반사된 방향을 정규화한 뒤 fuzz를 더하는 이유:
+벡터 크기가 크면 fuzz의 영향이 줄어들고, 크기가 작으면 fuzz의 영향이 커진다.
+정규화(길이 = 1)해야 fuzz가 항상 일관된 크기로 작용한다.
+
+```cpp
+reflected = unit_vector(reflected) + (fuzz * random_unit_vector());
+```
+
+**fuzz가 너무 크면 생기는 문제:**
+무작위 벡터가 반사 방향을 표면 안쪽으로 밀어 넣을 수 있다.
+이 경우 `dot(scattered.direction(), rec.normal) > 0` 검사로 빛 흡수 처리:
+
+```cpp
+return dot(scattered.direction(), rec.normal) > 0;
+```
+
+---
+
+### 결과물
+
+![Ch.8 Metal](pbr-raytracer/results/ch8_metal.png)
+
+| 구 | 재질 | fuzz | 특징 |
+|----|------|------|------|
+| 가운데 (파랑) | `lambertian(0.1, 0.2, 0.5)` | — | 빛이 모든 방향으로 흩어짐 |
+| 왼쪽 (은색) | `metal(0.8, 0.8, 0.8)` | 0.3 | 흐린 반사, 주변이 뭉개짐 |
+| 오른쪽 (금색) | `metal(0.8, 0.6, 0.2)` | 0.0 | 완벽한 거울, 씬이 선명히 반사 |
+
+오른쪽 금속 구에 왼쪽 금속 구의 모습이 선명하게 비치고, 노란 땅이 두 금속 구 표면에 반사되어 섞인다.
+`fuzz` 차이가 시각적으로 명확하게 드러난다.
+
+### 관련 파일
+- [src/vec3.h](pbr-raytracer/src/vec3.h) (`near_zero()`, `reflect()` 추가)
+- [src/material.h](pbr-raytracer/src/material.h) (이번 챕터에서 추가 — `material`, `lambertian`, `metal`)
+- [src/hittable.h](pbr-raytracer/src/hittable.h) (`hit_record`에 `shared_ptr<material> mat` 추가)
+- [src/sphere.h](pbr-raytracer/src/sphere.h) (생성자에 `material` 인자 추가, `rec.mat` 저장)
+- [src/camera.h](pbr-raytracer/src/camera.h) (`ray_color`에서 `mat->scatter()` 호출로 교체)
