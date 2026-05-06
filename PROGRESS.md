@@ -56,7 +56,7 @@
 **시작일**: -
 **완료일**: -
 
-- [ ] OpenGL 환경 세팅
+- [ ] DirectX 11 환경 세팅
 - [ ] GGX BRDF 구현
 - [ ] Cook-Torrance 구현
 - [ ] HDR + Tone Mapping

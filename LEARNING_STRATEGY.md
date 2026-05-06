@@ -42,7 +42,27 @@
 
 **목표**: UE5가 실제로 쓰는 방식 직접 구현
 
+**API**: DirectX 11 (OpenGL 아님)
+- UE5가 Windows에서 DirectX를 기본으로 사용하므로 Phase 3와 직결됨
+- 셰이더 언어: HLSL (GLSL 아님)
+
 **주요 자료**: [LearnOpenGL PBR](https://learnopengl.com/PBR/Theory)
+- 이론/수식 참고용으로 그대로 사용 — PBR 수학은 API 무관
+- 코드 예제는 GLSL(OpenGL) 기준이므로 아래 규칙으로 번역해서 구현
+
+**OpenGL → DX11 대응 규칙**
+
+| OpenGL / GLSL | DirectX 11 / HLSL | 비고 |
+|---------------|-------------------|------|
+| GLFW + GLAD 초기화 | Win32 + D3D11 초기화 | 윈도우 생성 및 디바이스 설정 |
+| VAO / VBO | Vertex Buffer + Input Layout | 정점 데이터 구조 |
+| `glUniform*` | Constant Buffer (cbuffer) | 셰이더 상수 전달 |
+| GLSL `vec3`, `vec4` | HLSL `float3`, `float4` | 벡터 타입 |
+| GLSL `mat4` | HLSL `float4x4` | 행렬 타입 |
+| `texture()` | `tex.Sample(sampler, uv)` | 텍스처 샘플링 |
+| `gl_Position` | `SV_Position` | 정점 출력 시맨틱 |
+| Framebuffer | Render Target View (RTV) | 렌더 타겟 |
+| `glDrawArrays` | `Draw` / `DrawIndexed` | 드로우 콜 |
 
 **구현 목록**
 - [ ] GGX BRDF
