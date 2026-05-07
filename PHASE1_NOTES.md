@@ -1827,13 +1827,13 @@ vec3 viewport_v = -viewport_height * v;  // 뷰포트 세로 (-v: 아래가 +j)
 
 직각삼각형 탄젠트 정의:
 
-$$\tan\!\left(\frac{\text{vfov}}{2}\right) = \frac{h}{\text{focal\_length}}$$
+$$\tan\!\left(\frac{\text{vfov}}{2}\right) = \frac{h}{f}$$
 
-focal_length를 정리하면:
+focal\_length를 $f$ 로 표기. 정리하면:
 
-$$h = \tan\!\left(\frac{\text{vfov}}{2}\right) \times \text{focal\_length}$$
+$$h = \tan\!\left(\frac{\text{vfov}}{2}\right) \times f$$
 
-$$\text{viewport\_height} = 2h = 2 \times \tan\!\left(\frac{\text{vfov}}{2}\right) \times \text{focal\_length}$$
+$$\text{viewport height} = 2h = 2 \times \tan\!\left(\frac{\text{vfov}}{2}\right) \times f$$
 
 #### ④ 수식의 의미와 숫자 예시
 
