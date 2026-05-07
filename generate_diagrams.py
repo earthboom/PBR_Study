@@ -1516,4 +1516,242 @@ plt.savefig("diagrams/hollow_sphere.png", dpi=120, bbox_inches='tight')
 plt.close()
 print("hollow_sphere.png 생성 완료")
 
+# ── 20. 카메라 로컬 좌표계 (u, v, w) ─────────────────────────────────────────
+fig, axes = plt.subplots(1, 2, figsize=(16, 7))
+fig.suptitle('카메라 로컬 좌표계 (u, v, w)', fontsize=15, fontweight='bold')
+
+# ── 왼쪽: lookfrom/lookat/vup → w/u/v 구성 과정
+ax = axes[0]
+ax.set_title('① lookfrom, lookat, vup으로\n카메라 좌표계 구성', fontsize=11)
+ax.set_xlim(-0.5, 4.5)
+ax.set_ylim(-0.5, 4.0)
+ax.set_aspect('equal')
+ax.axis('off')
+
+lookfrom = np.array([1.0, 1.0])
+lookat   = np.array([3.5, 2.5])
+
+# lookfrom 점
+ax.plot(*lookfrom, 'o', color='#2c3e50', markersize=12, zorder=5)
+ax.text(lookfrom[0] - 0.15, lookfrom[1] - 0.35, 'lookfrom\n(카메라 위치)', fontsize=9,
+        ha='center', color='#2c3e50', fontweight='bold')
+
+# lookat 점
+ax.plot(*lookat, 's', color='#8e44ad', markersize=10, zorder=5)
+ax.text(lookat[0] + 0.15, lookat[1] + 0.2, 'lookat\n(바라보는 지점)', fontsize=9,
+        ha='center', color='#8e44ad', fontweight='bold')
+
+# w = lookfrom - lookat 방향 (뒤쪽)
+w_dir = lookfrom - lookat
+w_dir = w_dir / np.linalg.norm(w_dir)
+ax.annotate("", xy=lookfrom + 0.8 * w_dir, xytext=lookfrom,
+            arrowprops=dict(arrowstyle="-|>", color='#e74c3c', lw=2.5))
+ax.text(*(lookfrom + 1.0 * w_dir + np.array([-0.05, 0.15])), 'w\n(뒤쪽)',
+        fontsize=10, color='#e74c3c', fontweight='bold', ha='center')
+
+# 바라보는 방향 (lookat - lookfrom, 점선)
+view_dir = lookat - lookfrom
+view_dir_n = view_dir / np.linalg.norm(view_dir)
+ax.annotate("", xy=lookfrom + 0.8 * view_dir_n, xytext=lookfrom,
+            arrowprops=dict(arrowstyle="-|>", color='#aaa', lw=1.5, linestyle='dashed'))
+ax.text(*(lookfrom + 0.9 * view_dir_n + np.array([0.05, 0.1])), '바라보는\n방향',
+        fontsize=8, color='#aaa', ha='center')
+
+# u = vup × w 방향 (오른쪽)
+u_dir = np.array([w_dir[1], -w_dir[0]])  # 2D에서 w의 수직(오른쪽)
+ax.annotate("", xy=lookfrom + 0.8 * u_dir, xytext=lookfrom,
+            arrowprops=dict(arrowstyle="-|>", color='#27ae60', lw=2.5))
+ax.text(*(lookfrom + 1.0 * u_dir + np.array([0.1, 0.05])), 'u\n(오른쪽)',
+        fontsize=10, color='#27ae60', fontweight='bold', ha='center')
+
+# vup (위쪽 참조 벡터)
+ax.annotate("", xy=lookfrom + np.array([0, 0.9]), xytext=lookfrom,
+            arrowprops=dict(arrowstyle="-|>", color='#3498db', lw=2.0, linestyle='dotted'))
+ax.text(lookfrom[0] - 0.25, lookfrom[1] + 1.0, 'vup\n(월드 위쪽)', fontsize=9,
+        color='#3498db', ha='center')
+
+# 수식 설명
+ax.text(0.0, 3.7,
+        'w = normalize(lookfrom − lookat)\n'
+        'u = normalize(vup × w)\n'
+        'v = w × u',
+        fontsize=9, color='#2c3e50',
+        bbox=dict(boxstyle='round', facecolor='#fef9e7', edgecolor='#f39c12', alpha=0.9),
+        va='top')
+
+# ── 오른쪽: u/v/w로 뷰포트 만들기
+ax = axes[1]
+ax.set_title('② 카메라 로컬 축(u, v)으로\n뷰포트 구성', fontsize=11)
+ax.set_xlim(-1.5, 4.5)
+ax.set_ylim(-1.5, 3.5)
+ax.set_aspect('equal')
+ax.axis('off')
+
+cam = np.array([0.0, 0.0])
+focal = 2.5
+
+# 카메라 위치
+ax.plot(*cam, 'o', color='#2c3e50', markersize=13, zorder=5)
+ax.text(cam[0], cam[1] - 0.4, '카메라\n(lookfrom)', fontsize=9, ha='center',
+        color='#2c3e50', fontweight='bold')
+
+# 뷰포트 사각형 (카메라 앞 = x 방향)
+vp_cx = cam[0] + focal
+vp_h  = 1.4
+vp_w  = 2.0
+vp_left  = vp_cx
+vp_right = vp_cx
+vp_bot   = cam[1] - vp_h / 2
+vp_top   = cam[1] + vp_h / 2
+
+rect = patches.Rectangle((vp_left - 0.05, vp_bot), vp_w, vp_h,
+                          linewidth=2, edgecolor='#8e44ad', facecolor='#e8daef', alpha=0.5)
+ax.add_patch(rect)
+ax.text(vp_cx + vp_w / 2, vp_top + 0.2, '뷰포트', fontsize=10,
+        ha='center', color='#8e44ad', fontweight='bold')
+
+# focal_length 선
+ax.annotate("", xy=(vp_cx, cam[1]), xytext=cam,
+            arrowprops=dict(arrowstyle="-", color='#7f8c8d', lw=1.5, linestyle='dashed'))
+ax.text(vp_cx / 2 + cam[0] / 2, cam[1] - 0.25, 'focal_length\n(= w 방향 이동)', fontsize=8,
+        ha='center', color='#7f8c8d')
+
+# u 벡터 (뷰포트 가로 방향)
+ax.annotate("", xy=(vp_cx + 0.9, vp_bot + vp_h / 2), xytext=(vp_cx, vp_bot + vp_h / 2),
+            arrowprops=dict(arrowstyle="-|>", color='#27ae60', lw=2.5))
+ax.text(vp_cx + 1.0, vp_bot + vp_h / 2 + 0.2, 'u (오른쪽)\nviewport_width × u',
+        fontsize=8.5, color='#27ae60', fontweight='bold')
+
+# v 벡터 (뷰포트 세로 방향, 아래 = +j)
+ax.annotate("", xy=(vp_cx + vp_w / 2, vp_bot - 0.7), xytext=(vp_cx + vp_w / 2, vp_bot),
+            arrowprops=dict(arrowstyle="-|>", color='#e74c3c', lw=2.5))
+ax.text(vp_cx + vp_w / 2 + 0.15, vp_bot - 0.55, '−v (아래쪽)\nviewport_height × (−v)',
+        fontsize=8.5, color='#e74c3c', fontweight='bold')
+
+# 기존 방식 vs 새 방식 비교
+ax.text(-1.4, 3.3,
+        '이전: viewport_u = (width, 0, 0)  ← 세계 x축 고정\n'
+        '이후: viewport_u = width × u        ← 카메라 로컬 축',
+        fontsize=8.5, color='#2c3e50',
+        bbox=dict(boxstyle='round', facecolor='#eafaf1', edgecolor='#27ae60', alpha=0.9),
+        va='top')
+
+plt.tight_layout()
+plt.savefig("diagrams/camera_coordinate.png", dpi=120, bbox_inches='tight')
+plt.close()
+print("camera_coordinate.png 생성 완료")
+
+# ── 21. FOV → 뷰포트 높이 변환 ───────────────────────────────────────────────
+fig, axes = plt.subplots(1, 2, figsize=(16, 7))
+fig.suptitle('FOV → 뷰포트 높이 변환\nh = tan(vfov / 2)', fontsize=15, fontweight='bold')
+
+# ── 왼쪽: 직각삼각형으로 tan 유도
+ax = axes[0]
+ax.set_title('① tan(vfov/2) = h / focal_length', fontsize=11)
+ax.set_xlim(-0.5, 4.5)
+ax.set_ylim(-2.5, 3.0)
+ax.set_aspect('equal')
+ax.axis('off')
+
+cam = np.array([0.0, 0.0])
+focal = 3.5
+h = 1.5
+
+# 삼각형 꼭짓점
+A = cam                         # 카메라
+B = np.array([focal, 0.0])      # 뷰포트 중심
+C = np.array([focal, h])        # 뷰포트 위쪽 끝
+
+tri = plt.Polygon([A, B, C], fill=True, facecolor='#d6eaf8', edgecolor='#2980b9',
+                  linewidth=2, alpha=0.6)
+ax.add_patch(tri)
+
+# 삼각형 꼭짓점 레이블
+ax.plot(*A, 'o', color='#2c3e50', markersize=12, zorder=5)
+ax.text(A[0] - 0.2, A[1] - 0.3, '카메라', fontsize=9, color='#2c3e50', fontweight='bold')
+
+ax.plot(*B, 'o', color='#7f8c8d', markersize=8, zorder=5)
+ax.text(B[0] + 0.1, B[1] - 0.3, '뷰포트\n중심', fontsize=8.5, color='#7f8c8d')
+
+ax.plot(*C, 'o', color='#8e44ad', markersize=8, zorder=5)
+ax.text(C[0] + 0.1, C[1] + 0.1, '뷰포트\n상단', fontsize=8.5, color='#8e44ad')
+
+# focal_length 레이블
+ax.text(focal / 2, -0.35, 'focal_length\n(인접한 변)', fontsize=9.5,
+        ha='center', color='#2980b9', fontweight='bold')
+
+# h 레이블
+ax.annotate("", xy=C, xytext=B,
+            arrowprops=dict(arrowstyle="<->", color='#e74c3c', lw=2.0))
+ax.text(focal + 0.35, h / 2, 'h\n(반대편)', fontsize=10, color='#e74c3c',
+        fontweight='bold', va='center')
+
+# 직각 표시
+sq = patches.Rectangle((focal - 0.18, 0), 0.18, 0.18,
+                        linewidth=1.5, edgecolor='#555', facecolor='none')
+ax.add_patch(sq)
+
+# 각도 호 (vfov/2)
+theta_val = np.degrees(np.arctan2(h, focal))
+arc = np.linspace(0, np.radians(theta_val), 60)
+ax.plot(0.6 * np.cos(arc), 0.6 * np.sin(arc), color='#f39c12', lw=2.0)
+ax.text(0.85 * np.cos(np.radians(theta_val / 2)),
+        0.85 * np.sin(np.radians(theta_val / 2)),
+        'vfov/2', fontsize=9, color='#f39c12', fontweight='bold', ha='center')
+
+# 수식
+ax.text(0.0, 2.7,
+        'tan(vfov/2) = h / focal_length\n'
+        '→  h = tan(vfov/2) × focal_length\n'
+        '→  viewport_height = 2h',
+        fontsize=10, color='#2c3e50',
+        bbox=dict(boxstyle='round', facecolor='#fef9e7', edgecolor='#f39c12', alpha=0.9))
+
+# ── 오른쪽: vfov 변화에 따른 뷰포트 크기 비교
+ax = axes[1]
+ax.set_title('② vfov에 따른 뷰포트 크기 비교\n(같은 focal_length)', fontsize=11)
+ax.set_xlim(-0.5, 5.5)
+ax.set_ylim(-3.5, 3.5)
+ax.set_aspect('equal')
+ax.axis('off')
+
+cam = np.array([0.0, 0.0])
+focal = 3.5
+vfov_cases = [
+    (20,  '#e74c3c', '좁은 FOV (20°)\n→ 망원, 확대'),
+    (60,  '#f39c12', '중간 FOV (60°)\n→ 표준'),
+    (90,  '#27ae60', '넓은 FOV (90°)\n→ 광각'),
+]
+
+ax.plot(*cam, 'o', color='#2c3e50', markersize=13, zorder=5)
+ax.text(cam[0], cam[1] - 0.4, '카메라', fontsize=9, ha='center',
+        color='#2c3e50', fontweight='bold')
+
+x_offset = 0.0
+for i, (vfov_deg, color, label) in enumerate(vfov_cases):
+    h = np.tan(np.radians(vfov_deg / 2)) * focal
+    # 시야각 삼각형 (선만)
+    upper = np.array([focal, h])
+    lower = np.array([focal, -h])
+    ax.plot([cam[0], upper[0]], [cam[1], upper[1]], '--', color=color, lw=1.5, alpha=0.7)
+    ax.plot([cam[0], lower[0]], [cam[1], lower[1]], '--', color=color, lw=1.5, alpha=0.7)
+
+    # 뷰포트 선분
+    lw = 3.5 - i * 0.7
+    ax.plot([focal, focal], [-h, h], color=color, lw=lw, solid_capstyle='round', zorder=4)
+    ax.text(focal + 0.2 + i * 0.05, 0,
+            f'{vfov_deg}°\nh={h:.2f}',
+            fontsize=8.5, color=color, fontweight='bold', va='center',
+            bbox=dict(boxstyle='round,pad=0.2', facecolor='white', edgecolor=color, alpha=0.8))
+
+    ax.text(focal + 0.15, h + 0.15, label, fontsize=7.5, color=color, va='bottom')
+
+ax.axhline(0, xmin=0.05, xmax=0.95, color='#bdc3c7', lw=0.8, linestyle=':')
+ax.text(focal / 2, -3.2, f'focal_length = {focal}', fontsize=9, ha='center', color='#7f8c8d')
+
+plt.tight_layout()
+plt.savefig("diagrams/fov_viewport.png", dpi=120, bbox_inches='tight')
+plt.close()
+print("fov_viewport.png 생성 완료")
+
 print("\n모든 다이어그램 생성 완료 → diagrams/ 폴더")

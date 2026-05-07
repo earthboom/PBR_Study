@@ -1,6 +1,6 @@
 # 학습 진행 상황
 
-## 현재 Phase: Phase 1 진행 중 — 다음 작업: Ch.10 Positionable Camera
+## 현재 Phase: Phase 1 진행 중 — 다음 작업: Ch.11 Defocus Blur
 
 ---
 
@@ -27,8 +27,8 @@
 - [x] Ch.7 Diffuse Materials — 람베르트 확산, 재귀 광선 추적, 감마 보정
 - [x] Ch.8 Metal — 정반사, material 추상화, lambertian/metal 클래스, fuzz
 - [x] Ch.9 Dielectrics — 굴절(스넬의 법칙), 전반사, 슐릭 근사, 속 빈 유리 구
-- [ ] **Ch.10 Positionable Camera ← 현재 위치**
-- [ ] Ch.11 Defocus Blur
+- [x] Ch.10 Positionable Camera — 카메라 로컬 좌표계(u/v/w), FOV, lookfrom/lookat/vup
+- [ ] **Ch.11 Defocus Blur ← 현재 위치**
 
 ### Ray Tracing: The Next Week (2권)
 - [ ] Motion Blur

@@ -1700,3 +1700,189 @@ world.add(make_shared<sphere>(point3(-1,0,-1), -0.4, mat_bubble));  // 안쪽 �
 - [src/vec3.h](pbr-raytracer/src/vec3.h) (`refract()` 추가)
 - [src/material.h](pbr-raytracer/src/material.h) (`dielectric` 클래스 추가)
 - [src/main.cpp](pbr-raytracer/src/main.cpp) (씬에 유리 구 + 속 빈 구 추가)
+
+---
+
+## Ch.10 — 위치 조절 가능한 카메라 (Positionable Camera)
+
+### 왜 이걸 하는가?
+
+Ch.9까지는 카메라가 항상 **원점(0, 0, 0)에서 -z 방향**을 바라봤다.
+`initialize()` 안에 `center = point3(0,0,0)`이 하드코딩되어 있었고, 뷰포트도 항상 세계 x/y축 기준이었다.
+
+이번 챕터의 목표: 카메라를 **씬 어디서든, 어느 방향으로든** 놓을 수 있게 한다.
+이를 위해 두 가지 수학 개념을 도입한다:
+1. **카메라 로컬 좌표계 (u, v, w)** — lookfrom/lookat/vup 세 값으로 카메라 방향 확정
+2. **FOV → 뷰포트 높이 변환** — 시야각(degree)을 뷰포트 크기(유닛)로 환산
+
+---
+
+### 개념 1: 카메라 로컬 좌표계 (u, v, w)
+
+#### ① 왜 이게 필요한가?
+
+지금 뷰포트는 세계 x축(`vec3(width, 0, 0)`)과 세계 -y축(`vec3(0, -height, 0)`)으로 만들어진다.
+카메라가 기울어지거나 다른 방향을 바라보면 이 세계 축 기반 뷰포트는 완전히 틀어진다.
+카메라 **자신만의 로컬 좌표축**으로 뷰포트를 만들어야 어느 방향을 바라봐도 올바르다.
+
+#### ② 머릿속 그림
+
+```
+        vup (월드 위쪽, 보통 (0,1,0))
+         ↑
+         │    ← lookat (바라보는 지점)
+         │   ╱
+  lookfrom (카메라 위치)
+
+구한 뒤:
+  w = 카메라 뒤쪽 (lookfrom → lookat의 반대)
+  u = 카메라 오른쪽 (w와 vup에 수직)
+  v = 카메라 위쪽  (w와 u에 수직, 자동 결정)
+```
+
+#### ③ 일상 비유
+
+GPS 내비게이션이 방향을 잡는 법 — "나는 여기(lookfrom) 서서 저기(lookat)를 본다. 하늘(vup)이 위쪽이다." 이 세 정보만 있으면 내 앞/뒤/좌/우가 완전히 확정된다.
+
+#### ④ 수식 전개 — 외적으로 좌표계 구성
+
+세 단위벡터 **w(뒤), u(오른쪽), v(위)** 를 순서대로 구한다:
+
+$$\mathbf{w} = \frac{\text{lookfrom} - \text{lookat}}{|\text{lookfrom} - \text{lookat}|}$$
+
+$$\mathbf{u} = \frac{\mathbf{vup} \times \mathbf{w}}{|\mathbf{vup} \times \mathbf{w}|}$$
+
+$$\mathbf{v} = \mathbf{w} \times \mathbf{u}$$
+
+**왜 이 순서인가?**
+
+- `w`는 "바라보는 방향의 반대"이므로 `lookfrom - lookat`을 정규화.
+- `u`는 w와 vup **둘 다에 수직**인 방향 → 외적 `vup × w`로 구한다. 이게 카메라 오른쪽.
+- `v`는 w와 u가 확정된 뒤 자동으로 결정 → `w × u`. v는 이미 단위벡터인 두 수직 벡터의 외적이므로 별도 정규화 불필요.
+
+#### ⑤ 수식의 의미
+
+| 벡터 | 의미 | 코드에서 역할 |
+|------|------|-------------|
+| `w` | 카메라 뒤쪽 | 뷰포트 중심 = center - focal_length × **w** |
+| `u` | 카메라 오른쪽 | `viewport_u = viewport_width × u` |
+| `v` | 카메라 위쪽 | `viewport_v = -viewport_height × v` (아래가 +j이므로 부호 반전) |
+
+기존의 `vec3(viewport_width, 0, 0)` (세계 x축)이 `viewport_width * u`로 바뀐다.
+기존의 `vec3(0, -viewport_height, 0)` (세계 -y축)이 `-viewport_height * v`로 바뀐다.
+
+#### ⑥ 구체적 숫자 예시
+
+`lookfrom = (3, 3, 2)`, `lookat = (0, 0, -1)`, `vup = (0, 1, 0)` 일 때:
+
+```
+lookfrom - lookat = (3, 3, 3)
+w = normalize(3,3,3) ≈ (0.577, 0.577, 0.577)
+
+vup × w = (0,1,0) × (0.577, 0.577, 0.577)
+        = (1×0.577 - 0×0.577, 0×0.577 - 0×0.577, 0×0.577 - 1×0.577)
+        = (0.577, 0, -0.577)
+u = normalize(0.577, 0, -0.577) ≈ (0.707, 0, -0.707)  ← 오른쪽
+
+v = w × u ≈ (-0.408, 0.816, -0.408)  ← 위쪽 (자동 결정)
+```
+
+#### ⑦ 코드와 연결
+
+```cpp
+w = unit_vector(lookfrom - lookat);  // 뒤쪽
+u = unit_vector(cross(vup, w));      // 오른쪽
+v = cross(w, u);                     // 위쪽
+
+vec3 viewport_u =  viewport_width  * u;  // 뷰포트 가로
+vec3 viewport_v = -viewport_height * v;  // 뷰포트 세로 (-v: 아래가 +j)
+```
+
+![카메라 로컬 좌표계](diagrams/camera_coordinate.png)
+
+---
+
+### 개념 2: FOV → 뷰포트 높이 변환
+
+#### ① 왜 이게 필요한가?
+
+`vfov`는 각도(degree)다. 뷰포트는 유닛 크기의 직사각형이다.
+"시야각 20°"를 "뷰포트 높이 몇 유닛"으로 변환해야 픽셀 계산이 가능하다.
+
+#### ② 머릿속 그림
+
+카메라를 옆에서 본 단면도:
+
+```
+카메라
+  ●────────────────── 뷰포트 중심
+  │ ← focal_length →  │
+  │ vfov/2 각도        ├── h = viewport_height / 2
+  └───────────────────┘
+```
+
+카메라~뷰포트 중심을 인접한 변(focal_length), 뷰포트 절반 높이를 반대편(h)으로 보면 직각삼각형이 만들어진다.
+
+#### ③ 수식 전개
+
+직각삼각형 탄젠트 정의:
+
+$$\tan\!\left(\frac{\text{vfov}}{2}\right) = \frac{h}{\text{focal\_length}}$$
+
+focal_length를 정리하면:
+
+$$h = \tan\!\left(\frac{\text{vfov}}{2}\right) \times \text{focal\_length}$$
+
+$$\text{viewport\_height} = 2h = 2 \times \tan\!\left(\frac{\text{vfov}}{2}\right) \times \text{focal\_length}$$
+
+#### ④ 수식의 의미와 숫자 예시
+
+`h`는 "focal_length 거리에 뷰포트를 놓았을 때 절반 높이"다.
+
+| vfov | h = tan(vfov/2) | viewport_height (focal_length=1) |
+|------|-----------------|----------------------------------|
+| 90° | tan(45°) = 1.0 | 2.0 ← 이전 챕터 하드코딩 값과 동일 |
+| 60° | tan(30°) ≈ 0.577 | 1.155 |
+| 20° | tan(10°) ≈ 0.176 | 0.353 |
+
+vfov가 작을수록 뷰포트가 좁아지고 → 씬이 확대되어 보인다 (망원렌즈 효과).
+
+> **기존 코드와의 연결**: 이전 챕터의 `viewport_height = 2.0` 하드코딩은 사실 `vfov = 90°`일 때의 결과였다.
+
+#### ⑤ 코드와 연결
+
+```cpp
+double focal_length    = (lookfrom - lookat).length();
+double theta           = degrees_to_radians(vfov);
+double h               = std::tan(theta / 2);
+double viewport_height = 2.0 * h * focal_length;
+```
+
+| 수식 기호 | 코드 |
+|---------|------|
+| focal_length | `(lookfrom - lookat).length()` |
+| vfov/2 (라디안) | `theta / 2` |
+| tan(vfov/2) | `std::tan(theta / 2)` |
+| h | `h` |
+| viewport_height | `2.0 * h * focal_length` |
+
+![FOV 뷰포트 높이 변환](diagrams/fov_viewport.png)
+
+---
+
+### 결과물
+
+![Ch.10 Positionable Camera](pbr-raytracer/results/ch10_camera.png)
+
+Ch.9와 동일한 씬이지만 카메라 설정이 완전히 달라졌다:
+
+| 항목 | Ch.9 | Ch.10 |
+|------|------|-------|
+| 카메라 위치 | (0, 0, 0) 고정 | (3, 3, 2) — 오른쪽 위 대각선 |
+| 바라보는 방향 | 항상 -z | lookat (0, 0, -1) 자유 설정 |
+| vfov | 하드코딩(90°) | 20° — 망원 효과로 씬 확대 |
+
+카메라가 오른쪽 위에서 내려다보는 구도로, 좁은 FOV 덕분에 구 세 개가 크게 확대되어 보인다.
+
+### 관련 파일
+- [src/camera.h](pbr-raytracer/src/camera.h) (`vfov`, `lookfrom`, `lookat`, `vup`, `u/v/w` 추가, `initialize()` 재구성)
