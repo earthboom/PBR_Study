@@ -211,9 +211,11 @@ double root = (h - sqrtd) / a;
 
 - `$$...$$` 블록 안에서 줄 맨 앞에 `+`를 쓰지 않는다 — 마크다운이 리스트로 오인한다. `\begin{aligned}` 환경을 사용한다.
 - **`\text{}` 안에 언더스코어(`_`)를 절대 쓰지 않는다** — GitHub KaTeX 렌더러가 에러를 낸다.
-  - 나쁜 예: `\text{pixel\_center}`, `\text{focal\_length}`, `\text{viewport\_height}`
-  - 좋은 예: 코드 변수명은 백틱으로 쓰거나 수식 기호로 대체한다 (`P_{ij}`, `f` 등).
-  - 수식 안에서 변수명을 쓸 때는 `\text{focal length}` (공백) 또는 짧은 기호(`f`, `h`)로 치환하고 본문에서 "여기서 $f$ = `focal_length`" 식으로 정의한다.
+  - 나쁜 예: `\text{pixel\_center}`, `\text{focal\_length}`, `\text{defocus\_radius}`
+  - 좋은 예: 코드 변수명은 백틱으로 쓰거나 수식 기호로 대체한다 (`P_{ij}`, `f`, `r` 등).
+  - 수식 안에서 변수명을 쓸 때는 짧은 기호(`f`, `h`, `r`, `d`)로 치환하고, 수식 **앞에** "여기서 $r$ = `defocus_radius`" 식으로 기호를 먼저 정의한다.
+  - **위반 사례 (Ch.11)**: `\text{defocus\_angle}`, `\text{defocus\_radius}`, `\text{defocus\_disk\_u}` 등을 수식에 직접 사용해 GitHub에서 `'_' allowed only in math mode` 에러가 발생했다. $\theta$, $r$, $d$, $\mathbf{u_d}$ 등 기호로 교체해 수정했다.
+  - **노트 작성 후 반드시**: 수식 블록(`$$...$$`) 안에 언더스코어가 포함된 `\text{}` 가 있는지 검색해 확인한다. 명령: `grep -n '\\text{[^}]*_' PHASE1_NOTES.md`
 - 수식 다음에는 반드시 한국어로 "이 수식이 의미하는 것"을 한 문장 이상 설명한다.
 
 ### 좋은 설명의 기준

@@ -1945,14 +1945,16 @@ Ch.9와 동일한 씬이지만 카메라 설정이 완전히 달라졌다:
 - 각도: `defocus_angle / 2`
 - 맞은편 변: 조리개 원판의 반지름 (`defocus_radius`)
 
-$$
-\tan\!\left(\frac{\text{defocus\_angle}}{2}\right) = \frac{\text{defocus\_radius}}{\text{focus\_dist}}
-$$
-
-양변에 `focus_dist`를 곱하면:
+여기서 $\theta = $ `defocus_angle / 2`, $d = $ `focus_dist`, $r = $ `defocus_radius`로 정의한다.
 
 $$
-\text{defocus\_radius} = \text{focus\_dist} \times \tan\!\left(\frac{\text{defocus\_angle}}{2}\right)
+\tan(\theta) = \frac{r}{d}
+$$
+
+양변에 $d$를 곱하면:
+
+$$
+r = d \times \tan(\theta)
 $$
 
 **수식이 의미하는 것**
@@ -2029,8 +2031,10 @@ Ch.11에서는 `focus_dist`를 `focal_length` 자리에 사용함으로써
 
 **수식**
 
+여기서 $\mathbf{c}$ = `center`, $\mathbf{u_d}$ = `defocus_disk_u`, $\mathbf{v_d}$ = `defocus_disk_v`로 정의한다.
+
 $$
-\text{sample} = \text{center} + p[0] \cdot \text{defocus\_disk\_u} + p[1] \cdot \text{defocus\_disk\_v}
+\mathbf{s} = \mathbf{c} + p_0 \cdot \mathbf{u_d} + p_1 \cdot \mathbf{v_d}
 $$
 
 여기서 $p$는 단위 원판 `random_in_unit_disk()`로 얻은 2D 점이다.
