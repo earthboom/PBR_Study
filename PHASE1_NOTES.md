@@ -1945,7 +1945,13 @@ Ch.9와 동일한 씬이지만 카메라 설정이 완전히 달라졌다:
 - 각도: `defocus_angle / 2`
 - 맞은편 변: 조리개 원판의 반지름 (`defocus_radius`)
 
-여기서 $\theta = $ `defocus_angle / 2`, $d = $ `focus_dist`, $r = $ `defocus_radius`로 정의한다.
+기호 정의:
+
+| 기호 | 코드 변수 |
+|------|-----------|
+| $\theta$ | `defocus_angle / 2` |
+| $d$ | `focus_dist` |
+| $r$ | `defocus_radius` |
 
 $$
 \tan(\theta) = \frac{r}{d}
@@ -2031,7 +2037,15 @@ Ch.11에서는 `focus_dist`를 `focal_length` 자리에 사용함으로써
 
 **수식**
 
-여기서 $\mathbf{c}$ = `center`, $\mathbf{u_d}$ = `defocus_disk_u`, $\mathbf{v_d}$ = `defocus_disk_v`로 정의한다.
+기호 정의:
+
+| 기호 | 코드 변수 |
+|------|-----------|
+| $\mathbf{s}$ | sample (광선 출발점) |
+| $\mathbf{c}$ | `center` |
+| $p_0, p_1$ | `p[0]`, `p[1]` (단위 원판의 x, y 성분) |
+| $\mathbf{u_d}$ | `defocus_disk_u` |
+| $\mathbf{v_d}$ | `defocus_disk_v` |
 
 $$
 \mathbf{s} = \mathbf{c} + p_0 \cdot \mathbf{u_d} + p_1 \cdot \mathbf{v_d}
