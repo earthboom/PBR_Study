@@ -1886,3 +1886,240 @@ Ch.9와 동일한 씬이지만 카메라 설정이 완전히 달라졌다:
 
 ### 관련 파일
 - [src/camera.h](pbr-raytracer/src/camera.h) (`vfov`, `lookfrom`, `lookat`, `vup`, `u/v/w` 추가, `initialize()` 재구성)
+
+---
+
+## Ch.11 — Defocus Blur (심도 흐림 / 피사계 심도)
+
+### 왜 이 기능이 필요한가
+
+지금까지 모든 광선은 카메라의 단 한 점(핀홀)에서 출발했다.
+실제 카메라·눈은 그렇지 않다. 렌즈(조리개)를 통해 빛이 들어오고,
+**렌즈에서 일정 거리(초점 거리)에 있는 물체만 선명하게 맺히고** 그 앞뒤는 흐릿해진다.
+이 효과를 **피사계 심도(Depth of Field, DoF)** 또는 **Defocus Blur**라고 한다.
+
+이 챕터 이전까지는 씬 어디를 봐도 전부 선명했다.
+실제 사진처럼 특정 거리만 초점이 맞고 나머지가 흐리게 만들려면 광선의 출발점을 바꿔야 한다.
+
+---
+
+### 개념 1: 핀홀 카메라 vs 렌즈 카메라
+
+**머릿속 그림**
+핀홀 카메라는 바늘구멍 하나에서 모든 빛이 들어온다.
+어느 방향에서 온 빛이든 구멍을 지나면 하나의 점으로 모이기 때문에 거리와 무관하게 모든 게 선명하다.
+
+렌즈 카메라는 조리개(렌즈)가 면적을 가진다.
+같은 물체에서 나온 빛이 렌즈의 여러 점을 통과하는데, **초점 거리에 있는 물체의 빛만 한 점으로 수렴**한다.
+초점 밖의 물체에서 온 빛은 렌즈의 여러 점을 지난 뒤 필름에 도달할 때 퍼져버려서 흐릿하게 보인다.
+
+**비유**
+손전등을 벽에 비출 때, 손전등과 벽 사이에 볼록 유리를 두면
+유리에서 특정 거리의 물체만 뚜렷하게 보이고 나머지는 번진다.
+그것이 바로 렌즈 카메라의 원리다.
+
+![핀홀 카메라 vs 렌즈 카메라](diagrams/ch11_pinhole_vs_lens.png)
+
+**레이트레이서에서의 해결책**
+- 핀홀: 광선을 항상 `center` 한 점에서 출발시킨다 → 모든 게 선명
+- 렌즈: 광선 출발점을 **조리개 원판(defocus disk) 위의 무작위 점**으로 바꾼다 → 초점 평면만 선명
+
+---
+
+### 개념 2: 조리개 원판(Defocus Disk)과 반지름 계산
+
+**왜 이 수식이 필요한가**
+조리개의 크기가 클수록 흐림이 강해진다.
+`defocus_angle`(조리개의 열린 각도)과 `focus_dist`(초점까지의 거리)가 주어지면,
+그로부터 조리개 원판의 실제 반지름을 계산해야 한다.
+
+**머릿속 그림**
+카메라 위치에서 초점 평면까지 직선을 그으면 `focus_dist`가 된다.
+조리개 원판은 카메라 위치를 중심으로 카메라 면에 수직한 원이다.
+`defocus_angle/2`는 이 원의 반지름이 중심 축과 이루는 각도다.
+
+**수식 전개**
+
+직각삼각형을 생각한다:
+- 빗변: 초점 평면까지의 직선 (길이 = `focus_dist`)
+- 각도: `defocus_angle / 2`
+- 맞은편 변: 조리개 원판의 반지름 (`defocus_radius`)
+
+$$
+\tan\!\left(\frac{\text{defocus\_angle}}{2}\right) = \frac{\text{defocus\_radius}}{\text{focus\_dist}}
+$$
+
+양변에 `focus_dist`를 곱하면:
+
+$$
+\text{defocus\_radius} = \text{focus\_dist} \times \tan\!\left(\frac{\text{defocus\_angle}}{2}\right)
+$$
+
+**수식이 의미하는 것**
+초점 거리가 길수록, 또는 조리개 각도가 클수록 원판이 커진다.
+원판이 클수록 같은 픽셀에 대한 광선들이 더 넓은 범위에서 출발하므로 흐림이 강해진다.
+
+**숫자 예시**
+Ch.11 설정: `focus_dist ≈ 3.74`, `defocus_angle = 10°`
+
+```
+defocus_radius = 3.74 × tan(5°) = 3.74 × 0.0875 ≈ 0.327
+```
+
+**코드와 1:1 연결**
+
+| 수식 기호 | 코드 변수/표현 |
+|-----------|---------------|
+| defocus\_angle / 2 | `defocus_angle / 2` (도 단위, `degrees_to_radians`로 변환) |
+| focus\_dist | `focus_dist` |
+| defocus\_radius | `defocus_radius` (지역 변수) |
+| tan(·) | `std::tan(degrees_to_radians(defocus_angle / 2))` |
+
+```cpp
+double defocus_radius = focus_dist * std::tan(degrees_to_radians(defocus_angle / 2));
+defocus_disk_u = u * defocus_radius;   // 카메라 오른쪽 방향 반지름 벡터
+defocus_disk_v = v * defocus_radius;   // 카메라 위쪽 방향 반지름 벡터
+```
+
+![조리개 원판(Defocus Disk) 구조](diagrams/ch11_defocus_disk.png)
+
+---
+
+### 개념 3: 초점 평면(Focus Plane)
+
+**왜 이 개념이 필요한가**
+조리개 원판 위의 서로 다른 점에서 출발한 광선들이 한 점에서 만나야만 그 물체가 선명하게 보인다.
+그 수렴 지점들의 집합이 **초점 평면**이다.
+
+**머릿속 그림**
+조리개 원판의 모든 점에서 같은 픽셀을 향해 광선을 쏜다.
+각 광선의 방향은 `pixel_sample - ray_origin`으로 계산된다.
+`pixel_sample`은 뷰포트 위의 점이고, 뷰포트는 `focus_dist` 거리에 있다.
+따라서 원판 위 어느 점에서 출발하든 광선은 뷰포트의 같은 픽셀 위치를 지난다.
+
+즉, **초점 평면 = 뷰포트가 위치한 평면** = 카메라에서 `focus_dist`만큼 떨어진 평면이다.
+
+**비유**
+카메라 여러 대가 부채꼴로 늘어서서 모두 같은 점(초점)을 향해 촬영하면
+그 점은 모든 사진에서 같은 위치에 찍힌다 = 선명.
+다른 거리에 있는 물체는 카메라마다 다른 각도로 찍혀서 합치면 번진다 = 흐림.
+
+![초점 평면](diagrams/ch11_focus_plane.png)
+
+**코드와의 연결**
+
+```cpp
+// 뷰포트를 focus_dist 거리에 배치 (기존 focal_length 대신)
+double viewport_height = 2.0 * h * focus_dist;
+point3 viewport_upper_left = center - (focus_dist * w) - viewport_u/2 - viewport_v/2;
+```
+
+Ch.10까지는 `focal_length = 1`이 고정이었다.
+Ch.11에서는 `focus_dist`를 `focal_length` 자리에 사용함으로써
+뷰포트가 초점 평면과 정확히 일치하게 된다.
+
+---
+
+### 개념 4: 조리개 원판 위 무작위 샘플링 (`defocus_disk_sample`)
+
+**왜 이 수식이 필요한가**
+광선 출발점을 원판 위의 무작위 점으로 결정해야 한다.
+원판은 카메라의 로컬 좌표계(u, v)로 정의되므로,
+단위 원판 안의 2D 점 `(p[0], p[1])`을 `defocus_disk_u`와 `defocus_disk_v`로 변환하면 된다.
+
+**수식**
+
+$$
+\text{sample} = \text{center} + p[0] \cdot \text{defocus\_disk\_u} + p[1] \cdot \text{defocus\_disk\_v}
+$$
+
+여기서 $p$는 단위 원판 `random_in_unit_disk()`로 얻은 2D 점이다.
+
+**수식이 의미하는 것**
+`p[0]`은 오른쪽(u) 방향 성분, `p[1]`은 위쪽(v) 방향 성분이다.
+이 둘을 조리개 반지름으로 스케일된 벡터에 곱하면
+카메라 좌표계 기준 원판 위의 실제 3D 점이 된다.
+
+**코드와 1:1 연결**
+
+| 수식 기호 | 코드 |
+|-----------|------|
+| center | `center` |
+| p[0] | `p[0]` (단위 원판의 x 성분) |
+| p[1] | `p[1]` (단위 원판의 y 성분) |
+| defocus\_disk\_u | `defocus_disk_u` (= `u * defocus_radius`) |
+| defocus\_disk\_v | `defocus_disk_v` (= `v * defocus_radius`) |
+
+```cpp
+point3 defocus_disk_sample() const
+{
+    vec3 p = random_in_unit_disk();
+    return center + (p[0] * defocus_disk_u) + (p[1] * defocus_disk_v);
+}
+```
+
+`random_in_unit_disk()`는 기각 샘플링으로 단위 원판(z=0) 안의 무작위 점을 반환한다:
+```cpp
+inline vec3 random_in_unit_disk()
+{
+    while (true)
+    {
+        vec3 p = vec3(random_double(-1,1), random_double(-1,1), 0);
+        if (p.length_squared() < 1)   // 원 안에 있으면 사용, 밖이면 버리고 재시도
+            return p;
+    }
+}
+```
+
+---
+
+### 개념 5: get_ray() 수정 — 출발점 선택
+
+`defocus_angle`이 0이면 핀홀(기존), 0보다 크면 원판 샘플 사용:
+
+```cpp
+point3 ray_origin = (defocus_angle <= 0) ? center : defocus_disk_sample();
+vec3 ray_direction = pixel_sample - ray_origin;
+return ray(ray_origin, ray_direction);
+```
+
+**핵심 포인트**: `ray_direction`은 항상 `pixel_sample - ray_origin`이다.
+`pixel_sample`은 뷰포트(초점 평면) 위의 점이기 때문에,
+원판의 어느 점에서 출발하든 모든 광선이 뷰포트의 같은 점을 향한다.
+결과적으로 초점 평면 위의 물체는 선명, 나머지는 흐릿하게 된다.
+
+![Defocus Blur 효과](diagrams/ch11_defocus_effect.png)
+
+---
+
+### Ch.11 설정값 정리
+
+```cpp
+cam.defocus_angle = 10.0;   // 조리개 각도 — 클수록 흐림 강해짐
+cam.focus_dist    = (point3(3,3,2) - point3(0,0,-1)).length();
+                            // lookat 지점까지의 거리 = 초점이 맞는 거리
+```
+
+`focus_dist`를 `(lookfrom - lookat).length()`로 설정하면
+**lookat 지점(씬 중심)이 정확히 초점**에 맞는다.
+그 앞뒤의 구들은 흐릿하게 보인다.
+
+| 파라미터 | 값 | 효과 |
+|---------|-----|------|
+| defocus_angle | 0 | 핀홀, 전부 선명 |
+| defocus_angle | 10 | 강한 흐림 |
+| focus_dist | lookat까지 거리 | lookat 지점에 초점 |
+
+---
+
+### 결과물
+
+![Ch.11 Defocus Blur](pbr-raytracer/results/ch11_defocus.png)
+
+lookat 지점인 `(0, 0, -1)` 근처의 파란 구(mat_center)가 가장 선명하고,
+가까운 왼쪽 유리 구와 먼 오른쪽 금속 구는 흐릿하게 보인다.
+`defocus_angle = 10°`로 상당히 강한 흐림 효과가 적용된 결과다.
+
+### 관련 파일
+- [src/camera.h](pbr-raytracer/src/camera.h) (`defocus_angle`, `focus_dist`, `defocus_disk_u/v`, `defocus_disk_sample()` 추가)
+- [src/vec3.h](pbr-raytracer/src/vec3.h) (`random_in_unit_disk()` 추가)

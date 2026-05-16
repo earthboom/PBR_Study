@@ -36,10 +36,13 @@ int main()
     cam.lookat   = point3(0, 0, -1);         // 씬 중심을 바라봄
     cam.vup      = vec3(0, 1, 0);            // 월드 위쪽
 
+    cam.defocus_angle = 10.0;                // 조리개 크기 — 클수록 배경 흐림 심해짐
+    cam.focus_dist    = (point3(3,3,2) - point3(0,0,-1)).length(); // lookat 지점이 정확히 초점
+
     // ── 렌더링 ───────────────────────────────────────────────────
     const std::filesystem::path out_dir = std::filesystem::path(PROJECT_SOURCE_DIR) / "output";
     std::filesystem::create_directories(out_dir);
-    std::ofstream out(out_dir / "ch10_camera.ppm");
+    std::ofstream out(out_dir / "ch11_defocus.ppm");
     if (!out) { std::cerr << "Failed to open output file\n"; return 1; }
 
     cam.render(world, out);

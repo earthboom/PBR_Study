@@ -1,6 +1,6 @@
 # 학습 진행 상황
 
-## 현재 Phase: Phase 1 진행 중 — 다음 작업: Ch.11 Defocus Blur
+## 현재 Phase: Phase 1 진행 중 — 다음 작업: Ch.12 최종 씬 (Final Scene)
 
 ---
 
@@ -28,7 +28,8 @@
 - [x] Ch.8 Metal — 정반사, material 추상화, lambertian/metal 클래스, fuzz
 - [x] Ch.9 Dielectrics — 굴절(스넬의 법칙), 전반사, 슐릭 근사, 속 빈 유리 구
 - [x] Ch.10 Positionable Camera — 카메라 로컬 좌표계(u/v/w), FOV, lookfrom/lookat/vup
-- [ ] **Ch.11 Defocus Blur ← 현재 위치**
+- [x] Ch.11 Defocus Blur — 조리개 원판, 초점 평면, defocus_disk_sample
+- [ ] **Ch.12 최종 씬 (Final Render) ← 현재 위치**
 
 ### Ray Tracing: The Next Week (2권)
 - [ ] Motion Blur

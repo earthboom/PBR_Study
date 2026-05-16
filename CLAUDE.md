@@ -50,10 +50,52 @@ PBR_Study/
 Rider에서 CMake 프로파일(Debug-Visual Studio)로 빌드 및 실행.
 출력 이미지는 `pbr-raytracer/output/` 폴더에 저장됨 (코드에서 자동 생성).
 
-PPM → PNG 변환 (`py` 명령 사용, `python`은 동작하지 않음):
-```
-py -c "from PIL import Image; Image.open('pbr-raytracer/output/chN_xxx.ppm').save('pbr-raytracer/output/chN_xxx.png')"
-```
+### PPM → PNG 변환 및 results/ 복사 (자동 처리)
+
+사용자가 "PPM 파일 생성 확인했어" 또는 빌드/실행 성공을 알리면, Claude가 **자동으로** 아래 작업을 순서대로 수행한다. 사용자에게 따로 물어보지 않는다.
+
+1. `output/` 폴더에 PPM 파일이 존재하는지 Glob으로 확인한다.
+2. PPM → PNG 변환 (`py` 명령 사용, `python`은 동작하지 않음):
+   - Pillow의 `Image.open`은 CRLF 라인 엔딩 때문에 실패할 수 있다. 실패 시 아래 커스텀 변환 스크립트를 사용한다:
+   ```python
+   py -c "
+   import struct, zlib
+   with open('pbr-raytracer/output/chN_xxx.ppm', 'rb') as f:
+       data = f.read()
+   text = data.replace(b'\r\n', b'\n').replace(b'\r', b'\n')
+   lines = text.split(b'\n')
+   idx = 0
+   while lines[idx].startswith(b'#') or lines[idx].strip() == b'': idx += 1
+   assert lines[idx] == b'P3'
+   idx += 1
+   while lines[idx].startswith(b'#') or lines[idx].strip() == b'': idx += 1
+   w, h = map(int, lines[idx].split()); idx += 1
+   while lines[idx].startswith(b'#') or lines[idx].strip() == b'': idx += 1
+   maxval = int(lines[idx]); idx += 1
+   tokens = []
+   for line in lines[idx:]: tokens.extend(line.split())
+   pixels = [int(t) for t in tokens if t]
+   def png_chunk(tag, data):
+       c = struct.pack('>I', len(data)) + tag + data
+       return c + struct.pack('>I', zlib.crc32(tag + data) & 0xffffffff)
+   ihdr = struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)
+   raw = b''
+   for row in range(h):
+       raw += b'\x00'
+       for col in range(w):
+           i = (row * w + col) * 3
+           raw += bytes([round(pixels[i]*255/maxval), round(pixels[i+1]*255/maxval), round(pixels[i+2]*255/maxval)])
+   compressed = zlib.compress(raw, 9)
+   out = b'\x89PNG\r\n\x1a\n' + png_chunk(b'IHDR', ihdr) + png_chunk(b'IDAT', compressed) + png_chunk(b'IEND', b'')
+   open('pbr-raytracer/output/chN_xxx.png', 'wb').write(out)
+   print('Done:', w, 'x', h)
+   "
+   ```
+3. 변환된 PNG를 `results/` 폴더로 복사한다 (Bash 도구에서 `cp` 사용, `copy`는 동작하지 않음):
+   ```
+   cp pbr-raytracer/output/chN_xxx.png pbr-raytracer/results/chN_xxx.png
+   ```
+4. `results/` 폴더에 PNG 파일이 실제로 존재하는지 확인한 뒤 사용자에게 보고한다.
 
 ---
 

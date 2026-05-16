@@ -19,6 +19,9 @@ public:
     point3 lookat = point3(0, 0, -1);  // 바라보는 지점
     vec3 vup = vec3(0, 1, 0);          // 카메라 위쪽 방향 (월드 업)
 
+    double defocus_angle = 0; // 조리개 반각 (도 단위), 0이면 블러가 없음
+    double focus_dist = 10;   // 카메라에서 초점 평면까지의 거리
+
     // Scene과 출력 스트림을 받아 PPM 출력
     void render(const hittable &world, std::ostream &out)
     {
@@ -53,6 +56,8 @@ private:
     vec3 pixel_delta_u;         // 가로 한 픽셀 이동량
     vec3 pixel_delta_v;         // 세로 한 픽셀 이동량
     vec3 u, v, w;               // 카메라 로컬 좌표축 (오른쪽, 위, 뒤)
+    vec3 defocus_disk_u;        // 조리개 원판의 수평 반지름 벡터
+    vec3 defocus_disk_v;        // 조리개 원판의 수직 반지름 벡터
 
     // 모든 내부 값을 한 번에 계산. render() 시작 시 호출됨.
     void initialize()
@@ -67,10 +72,9 @@ private:
 
         // FOV -> 뷰포트 높이 변환
         // h = tan(vfov/2) : focal_length = 1 기준 뷰포트 절반 높이
-        double focal_length = (lookfrom - lookat).length();
         double theta = degrees_to_radians(vfov);
         double h = std::tan(theta / 2);
-        double viewport_height = 2.0 * h * focal_length;
+        double viewport_height = 2.0 * h * focus_dist;
         double viewport_width = viewport_height * (double(image_width) / image_height);
 
         // 카메라 로컬 좌표계 구성
@@ -86,8 +90,13 @@ private:
         pixel_delta_v = viewport_v / image_height;
 
         // 뷰포트 왼쪽 위 모서리 : 카메라에서 앞으로(-w) focal_length만큼, 뷰포트 절반씩 이동
-        point3 viewport_upper_left = center - (focal_length * w) - viewport_u / 2 - viewport_v / 2;
+        point3 viewport_upper_left = center - (focus_dist * w) - viewport_u / 2 - viewport_v / 2;
         pixel00_loc = viewport_upper_left + 0.5 * (pixel_delta_u + pixel_delta_v);
+
+        // defocus_angle / 2 의 탄젠트 x focus_dist = 조리개 원판 반지름
+        double defocus_radius = focus_dist * std::tan(degrees_to_radians(defocus_angle / 2));
+        defocus_disk_u = u * defocus_radius; // 카메라 오른쪽 방향 반지름
+        defocus_disk_v = v * defocus_radius; // 카메라 위쪽 방향 반지름
     }
 
     // 픽셀 (i, j) 안의 무작위 위치를 향해 광선 1개를 만든다.
@@ -95,8 +104,12 @@ private:
     {
         vec3 offset = sample_square(); // [-0.5, +0.5)² 안의 점 = 픽셀 안 무작위 지점
         point3 pixel_sample = pixel00_loc + ((i + offset.x()) * pixel_delta_u) + ((j + offset.y()) * pixel_delta_v);
-        vec3 ray_direction = pixel_sample - center;
-        return ray(center, ray_direction);
+
+        // defocus_angle 이 0 이하면 핀홀 카메라 (기존 방식)
+        // 0 보다 크면 조리개 원판 위 무작위 점에서 광선 출발
+        point3 ray_origin = (defocus_angle <= 0) ? center : defocus_disk_sample();
+        vec3 ray_direction = pixel_sample - ray_origin;
+        return ray(ray_origin, ray_direction);
     }
 
     // 단위 사각형 [-0.5, +0.5)² 안의 무작위 점 (z=0)
@@ -104,6 +117,13 @@ private:
     vec3 sample_square() const
     {
         return vec3(random_double() - 0.5, random_double() - 0.5, 0);
+    }
+
+    // 조리개 원판(defocus disk) 위의 무작위 점을 반환
+    point3 defocus_disk_sample() const
+    {
+        vec3 p = random_in_unit_disk();
+        return center + (p[0] * defocus_disk_u) + (p[1] * defocus_disk_v);
     }
 
     // 광선이 Scene과 교차하면 법선으로 색으로, 아니면 하늘 그라디언트

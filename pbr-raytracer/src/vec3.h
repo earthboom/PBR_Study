@@ -176,3 +176,15 @@ inline vec3 refract(const vec3 &uv, const vec3 &n, double etai_over_etat)
     vec3 r_out_parallel = -std::sqrt(std::fabs(1.0 - r_out_perp.length_squared())) * n; // 평행 성분
     return r_out_perp + r_out_parallel;
 }
+
+// 단위 원판(z=0 평면, 반지름 1) 안의 무작위 점
+// random_in_unit_sphere() 와 같은 기각 샘플링 - z 성분 없이 2D
+inline vec3 random_in_unit_disk()
+{
+    while (true)
+    {
+        vec3 p = vec3(random_double(-1, 1), random_double(-1, 1), 0);
+        if (p.length_squared() < 1)
+            return p;
+    }
+}

@@ -1754,4 +1754,209 @@ plt.savefig("diagrams/fov_viewport.png", dpi=120, bbox_inches='tight')
 plt.close()
 print("fov_viewport.png 생성 완료")
 
+# ── Ch.11-1. 핀홀 카메라 vs 렌즈 카메라 ─────────────────────────────────────
+fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+fig.suptitle('핀홀 카메라 vs 렌즈 카메라 (Defocus Blur)', fontsize=15, fontweight='bold')
+
+for ax, (title, use_disk) in zip(axes, [("핀홀 카메라 (defocus_angle=0)", False), ("렌즈 카메라 (defocus_angle>0)", True)]):
+    ax.set_xlim(-1, 9)
+    ax.set_ylim(-3, 3)
+    ax.set_aspect('equal')
+    ax.axis('off')
+    ax.set_title(title, fontsize=11, fontweight='bold')
+
+    # 초점 평면
+    ax.plot([6, 6], [-2.5, 2.5], color='#27ae60', lw=2, linestyle='--')
+    ax.text(6.1, 2.6, '초점 평면\n(focus_dist)', fontsize=8, color='#27ae60', ha='left')
+
+    # 물체 위치 (초점 평면 위)
+    ax.plot(6, 1.0, 'o', color='#27ae60', markersize=10, zorder=5)
+    ax.text(6.1, 1.1, '초점 O\n(선명)', fontsize=8, color='#27ae60')
+
+    # 물체 위치 (초점 평면 밖)
+    ax.plot(4, 1.2, 's', color='#e74c3c', markersize=9, zorder=5)
+    ax.text(4.1, 1.4, '비초점 X\n(흐림)', fontsize=8, color='#e74c3c')
+
+    if not use_disk:
+        # 핀홀: 단일 점에서 광선
+        cam_pt = np.array([0.0, 0.0])
+        ax.plot(*cam_pt, 'o', color='#2c3e50', markersize=8, zorder=5)
+        ax.text(-0.1, 0.25, '카메라\n(1점)', fontsize=8, color='#2c3e50', ha='center')
+        for target in [(6, 1.0), (6, -1.0), (4, 1.2)]:
+            ax.annotate("", xy=target, xytext=cam_pt,
+                        arrowprops=dict(arrowstyle="-|>", color='#3498db', lw=1.2))
+    else:
+        # 렌즈: 원판 위 여러 점에서 광선
+        disk_pts = [(-0.1, -0.5), (0.0, 0.0), (0.1, 0.5)]
+        ax.plot([0, 0], [-0.7, 0.7], color='#8e44ad', lw=4, solid_capstyle='round', zorder=5)
+        ax.text(0.15, 0.85, '조리개\n원판', fontsize=8, color='#8e44ad')
+        colors = ['#e67e22', '#3498db', '#1abc9c']
+        for (px, py), c in zip(disk_pts, colors):
+            for target in [(6, 1.0)]:
+                ax.annotate("", xy=target, xytext=(px, py),
+                            arrowprops=dict(arrowstyle="-|>", color=c, lw=1.2, alpha=0.8))
+        # 비초점 물체: 원판의 여러 점에서 오는 광선이 흩어짐
+        for (px, py), c in zip(disk_pts, colors):
+            ax.annotate("", xy=(4, 1.2), xytext=(px, py),
+                        arrowprops=dict(arrowstyle="-|>", color=c, lw=1.0, alpha=0.5, linestyle='dashed'))
+
+plt.tight_layout()
+plt.savefig("diagrams/ch11_pinhole_vs_lens.png", dpi=120, bbox_inches='tight')
+plt.close()
+print("ch11_pinhole_vs_lens.png 생성 완료")
+
+# ── Ch.11-2. 조리개 원판(Defocus Disk) 구조 ──────────────────────────────────
+fig, ax = plt.subplots(figsize=(10, 7))
+ax.set_xlim(-1, 9)
+ax.set_ylim(-4, 4)
+ax.set_aspect('equal')
+ax.axis('off')
+ax.set_title('조리개 원판(Defocus Disk) 구조', fontsize=14, fontweight='bold')
+
+# 카메라 위치
+cam = np.array([0.0, 0.0])
+ax.plot(*cam, 'o', color='#2c3e50', markersize=10, zorder=6)
+ax.text(-0.1, 0.35, '카메라\ncenter', fontsize=9, color='#2c3e50', ha='center')
+
+# 조리개 원판 (반지름 = defocus_radius)
+disk_r = 0.8
+circle = plt.Circle(cam, disk_r, color='#8e44ad', fill=False, lw=2.5, linestyle='-', zorder=5)
+ax.add_patch(circle)
+ax.plot([0, disk_r], [0, 0], color='#8e44ad', lw=1.5, linestyle='--')
+ax.text(disk_r / 2, 0.15, 'defocus_radius\n= focus_dist × tan(defocus_angle/2)',
+        fontsize=8, color='#8e44ad', ha='center')
+
+# focus_dist 화살표
+ax.annotate("", xy=(6, 0), xytext=(0, 0),
+            arrowprops=dict(arrowstyle="<->", color='#27ae60', lw=2))
+ax.text(3, 0.25, 'focus_dist', fontsize=10, color='#27ae60', ha='center')
+
+# 초점 평면
+ax.plot([6, 6], [-3, 3], color='#27ae60', lw=2, linestyle='--')
+ax.text(6.1, 3.1, '초점 평면', fontsize=9, color='#27ae60')
+
+# defocus_angle 호
+theta_half = np.degrees(np.arctan(disk_r / 6))
+arc = np.linspace(0, np.radians(theta_half), 40)
+ax.plot(1.5 * np.cos(arc), 1.5 * np.sin(arc), color='#e67e22', lw=1.5)
+ax.text(1.7, 0.3, f'defocus_angle/2', fontsize=8, color='#e67e22')
+
+# 원판 위 무작위 샘플 점
+np.random.seed(42)
+for _ in range(8):
+    angle = np.random.uniform(0, 2 * np.pi)
+    r = np.random.uniform(0, disk_r)
+    px, py = r * np.cos(angle), r * np.sin(angle)
+    ax.plot(px, py, 'o', color='#e74c3c', markersize=5, zorder=7)
+
+ax.text(0, -1.3, '원판 위 무작위 점들\n(defocus_disk_sample)', fontsize=9,
+        color='#e74c3c', ha='center')
+
+# u, v 축
+ax.annotate("", xy=(0, disk_r + 0.3), xytext=(0, 0),
+            arrowprops=dict(arrowstyle="-|>", color='#3498db', lw=2))
+ax.text(0.1, disk_r + 0.4, 'defocus_disk_v\n(= v × radius)', fontsize=8, color='#3498db')
+ax.annotate("", xy=(disk_r + 0.3, 0), xytext=(0, 0),
+            arrowprops=dict(arrowstyle="-|>", color='#e67e22', lw=2))
+ax.text(disk_r + 0.4, -0.3, 'defocus_disk_u\n(= u × radius)', fontsize=8, color='#e67e22')
+
+plt.tight_layout()
+plt.savefig("diagrams/ch11_defocus_disk.png", dpi=120, bbox_inches='tight')
+plt.close()
+print("ch11_defocus_disk.png 생성 완료")
+
+# ── Ch.11-3. 초점 평면(Focus Plane) ──────────────────────────────────────────
+fig, ax = plt.subplots(figsize=(12, 6))
+ax.set_xlim(-0.5, 10)
+ax.set_ylim(-3.5, 3.5)
+ax.set_aspect('equal')
+ax.axis('off')
+ax.set_title('초점 평면 — 여기에 있는 물체만 선명하다', fontsize=13, fontweight='bold')
+
+cam = np.array([0.0, 0.0])
+focus_dist = 6.0
+
+# 조리개 원판
+ax.plot([0, 0], [-0.7, 0.7], color='#8e44ad', lw=5, solid_capstyle='round', zorder=5)
+ax.text(0.1, 1.0, '조리개\n원판', fontsize=9, color='#8e44ad')
+
+# focus_dist 화살표
+ax.annotate("", xy=(focus_dist, 0), xytext=(0.05, 0),
+            arrowprops=dict(arrowstyle="<->", color='#27ae60', lw=1.5))
+ax.text(focus_dist / 2, 0.3, 'focus_dist', fontsize=10, color='#27ae60', ha='center')
+
+# 초점 평면
+ax.plot([focus_dist, focus_dist], [-3, 3], color='#27ae60', lw=2.5, linestyle='-')
+ax.text(focus_dist + 0.1, 3.1, '초점 평면\n(선명)', fontsize=9, color='#27ae60')
+
+# 초점 평면 위 물체 → 원판의 모든 광선이 한 점에서 만남
+target_focused = np.array([focus_dist, 1.0])
+ax.plot(*target_focused, 'o', color='#27ae60', markersize=12, zorder=6)
+ax.text(focus_dist + 0.15, 1.2, '선명', fontsize=9, color='#27ae60', fontweight='bold')
+for py in [-0.5, 0.0, 0.5]:
+    ax.plot([py * 0.15, target_focused[0]], [py, target_focused[1]],
+            color='#3498db', lw=1.2, alpha=0.7)
+
+# 초점 평면 밖 물체 → 광선이 흩어짐
+near_obj = np.array([3.5, 1.2])
+ax.plot(*near_obj, 's', color='#e74c3c', markersize=11, zorder=6)
+ax.text(near_obj[0] + 0.1, near_obj[1] + 0.3, '흐림\n(앞쪽)', fontsize=9, color='#e74c3c', fontweight='bold')
+spread = 0.6
+for py, end_y in zip([-0.5, 0.0, 0.5], [near_obj[1] - spread, near_obj[1], near_obj[1] + spread]):
+    ax.plot([py * 0.15, near_obj[0]], [py, end_y],
+            color='#e74c3c', lw=1.0, alpha=0.5, linestyle='--')
+
+far_obj = np.array([8.5, -1.0])
+ax.plot(*far_obj, 's', color='#e67e22', markersize=11, zorder=6)
+ax.text(far_obj[0] + 0.1, far_obj[1] - 0.4, '흐림\n(뒤쪽)', fontsize=9, color='#e67e22', fontweight='bold')
+for py, end_y in zip([-0.5, 0.0, 0.5], [far_obj[1] + spread, far_obj[1], far_obj[1] - spread]):
+    ax.plot([py * 0.15, far_obj[0]], [py, end_y],
+            color='#e67e22', lw=1.0, alpha=0.5, linestyle='--')
+
+plt.tight_layout()
+plt.savefig("diagrams/ch11_focus_plane.png", dpi=120, bbox_inches='tight')
+plt.close()
+print("ch11_focus_plane.png 생성 완료")
+
+# ── Ch.11-4. Defocus Blur 효과 요약 ──────────────────────────────────────────
+fig, ax = plt.subplots(figsize=(11, 6))
+ax.set_xlim(0, 10)
+ax.set_ylim(-1, 5)
+ax.axis('off')
+ax.set_title('Defocus Blur — defocus_angle에 따른 흐림 변화', fontsize=13, fontweight='bold')
+
+cases = [
+    (0,   '0°\n(핀홀, 완전 선명)', '#2ecc71'),
+    (5,   '5°\n(약한 흐림)',        '#3498db'),
+    (10,  '10°\n(강한 흐림)',       '#e74c3c'),
+]
+
+x_positions = [1.5, 5.0, 8.5]
+focus_dist_diag = 3.0
+
+for x, (angle, label, color) in zip(x_positions, cases):
+    radius = focus_dist_diag * np.tan(np.radians(angle / 2)) if angle > 0 else 0.0
+    radius_vis = max(radius * 0.6, 0.04)
+
+    # 조리개 원판
+    ax.plot([x, x], [-radius_vis, radius_vis], color=color, lw=max(radius_vis * 18, 2),
+            solid_capstyle='round', zorder=5)
+
+    # 초점 평면까지 광선
+    target = np.array([x + focus_dist_diag * 0.7, 2.0])
+    for dy in np.linspace(-radius_vis, radius_vis, 4):
+        ax.plot([x, target[0]], [dy, target[1]], color=color, lw=0.9, alpha=0.6)
+
+    # 물체
+    ax.plot(*target, 'o', color=color, markersize=11, zorder=6)
+
+    # 라벨
+    ax.text(x, -0.5, label, fontsize=9, ha='center', color=color, fontweight='bold')
+    ax.text(x, 4.5, f'반지름\n≈ {radius:.2f}', fontsize=8, ha='center', color=color)
+
+plt.tight_layout()
+plt.savefig("diagrams/ch11_defocus_effect.png", dpi=120, bbox_inches='tight')
+plt.close()
+print("ch11_defocus_effect.png 생성 완료")
+
 print("\n모든 다이어그램 생성 완료 → diagrams/ 폴더")
